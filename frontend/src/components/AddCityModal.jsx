@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 
-const AddCityModal = ({ isOpen, onClose, onAdd }) => {
+const AddCityModal = ({ isOpen, onClose, onAdd, initialLat, initialLng }) => {
   const [name, setName] = useState('');
-  const [lat, setLat] = useState('');
-  const [lng, setLng] = useState('');
+  const [lat, setLat] = useState(initialLat ? String(initialLat) : '');
+  const [lng, setLng] = useState(initialLng ? String(initialLng) : '');
+
+  // Reset name when lng/lat changes (optional, but keep for reset logic when re-mounting)
+  // We'll rely on key-based re-mounting in the parent for a cleaner fix.
 
   if (!isOpen) return null;
 
@@ -39,27 +42,29 @@ const AddCityModal = ({ isOpen, onClose, onAdd }) => {
       }
 
       onAdd({ name, lat: parsedLat, lng: parsedLng });
-      setName(''); setLat(''); setLng('');
       onClose();
     }
   };
 
   return (
     <div className="modal-overlay fade-in">
-      <div className="modal-content glass-card glowing-border" style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div className="modal-content glass-card glowing-border">
         <h3 className="glow-text">Add New City</h3>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+          Capture coordinates by clicking on the map.
+        </p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>City Name</label>
-            <input className="input-field" value={name} onChange={e => setName(e.target.value)} required />
+            <input className="input-field" value={name} onChange={e => setName(e.target.value)} placeholder="Enter city name" required autoFocus />
           </div>
           <div className="form-group" style={{ marginTop: '15px' }}>
             <label>Latitude</label>
-            <input className="input-field" type="text" placeholder="e.g. 17.3850 or 17°23'6&quot;N" value={lat} onChange={e => setLat(e.target.value)} required />
+            <input className="input-field" type="text" placeholder="e.g. 17.3850" value={lat} onChange={e => setLat(e.target.value)} required />
           </div>
           <div className="form-group" style={{ marginTop: '15px' }}>
             <label>Longitude</label>
-            <input className="input-field" type="text" placeholder="e.g. 78.4867 or 78°29'12&quot;E" value={lng} onChange={e => setLng(e.target.value)} required />
+            <input className="input-field" type="text" placeholder="e.g. 78.4867" value={lng} onChange={e => setLng(e.target.value)} required />
           </div>
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>

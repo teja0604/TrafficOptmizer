@@ -10,81 +10,90 @@ import java.util.*;
 @Component
 public class DijkstraAlgorithm {
 
+    private static class NodeDistance implements Comparable<NodeDistance> {
+        Long cityId;
+        double distance;
+
+        NodeDistance(Long cityId, double distance) {
+            this.cityId = cityId;
+            this.distance = distance;
+        }
+
+        @Override
+        public int compareTo(NodeDistance other) {
+            return Double.compare(this.distance, other.distance);
+        }
+    }
+
     public ShortestPathResponse findShortestPath(Graph graph, Long startCityId, Long endCityId, double trafficLevel) {
         Map<Long, Double> distances = new HashMap<>();
         Map<Long, Long> previous = new HashMap<>();
-        PriorityQueue<Long> pq = new PriorityQueue<>(Comparator.comparingDouble(distances::get));
+        PriorityQueue<NodeDistance> pq = new PriorityQueue<>();
 
-        Set<Long> visited = new HashSet<>();
-
+        // 1. Initialize distances
         for (Long cityId : graph.getCities().keySet()) {
             distances.put(cityId, Double.POSITIVE_INFINITY);
             previous.put(cityId, null);
         }
+
+        // 2. Start node
         distances.put(startCityId, 0.0);
-        pq.add(startCityId);
+        pq.add(new NodeDistance(startCityId, 0.0));
 
         while (!pq.isEmpty()) {
-            Long current = pq.poll();
+            NodeDistance current = pq.poll();
+            Long u = current.cityId;
 
-            if (current.equals(endCityId)) {
-                break;
-            }
+            if (current.distance > distances.get(u)) continue;
+            if (u.equals(endCityId)) break;
 
-            if (visited.contains(current)) {
-                continue;
-            }
-            visited.add(current);
-
-            List<Road> adjacentRoads = graph.getAdjacentRoads(current);
-            if (adjacentRoads == null)
-                continue;
+            List<Road> adjacentRoads = graph.getAdjacentRoads(u);
+            if (adjacentRoads == null) continue;
 
             for (Road road : adjacentRoads) {
-                Long neighbor = road.getToCity();
-                if (neighbor == null)
-                    continue;
+                Long v = road.getToCity();
+                if (v == null) continue;
 
-                double effectiveWeight = road.getEffectiveWeight(trafficLevel);
-                double newDist = distances.get(current) + effectiveWeight;
+                // 3. Relax edges
+                double weight = road.getEffectiveWeight(trafficLevel);
+                double distanceThroughU = distances.get(u) + weight;
 
-                if (newDist < distances.get(neighbor)) {
-                    distances.put(neighbor, newDist);
-                    previous.put(neighbor, current);
-                    pq.add(neighbor);
+                if (distanceThroughU < distances.get(v)) {
+                    distances.put(v, distanceThroughU);
+                    previous.put(v, u);
+                    pq.add(new NodeDistance(v, distanceThroughU));
                 }
             }
         }
 
+        // 4. Trace path and calculate distance
         List<City> path = new ArrayList<>();
-        Long curr = endCityId;
+        Long currId = endCityId;
         double finalDistance = 0.0;
 
-        if (previous.get(curr) != null || curr.equals(startCityId)) {
-            while (curr != null) {
-                City currentPathCity = graph.getCities().get(curr);
-                if (currentPathCity != null) {
-                    path.add(0, currentPathCity);
-                }
+        if (previous.get(currId) != null || currId.equals(startCityId)) {
+            while (currId != null) {
+                City city = graph.getCities().get(currId);
+                if (city != null) path.add(0, city);
 
-                Long prevNode = previous.get(curr);
-                if (prevNode != null) {
-                    final Long c = curr;
-                    List<Road> adjacentPrev = graph.getAdjacentRoads(prevNode);
-                    if (adjacentPrev != null) {
-                        Road connectingRoad = adjacentPrev.stream()
-                                .filter(r -> r.getToCity() != null && r.getToCity().equals(c))
+                Long prevId = previous.get(currId);
+                if (prevId != null) {
+                    final Long currentIdFinal = currId;
+                    List<Road> roadsFromPrev = graph.getAdjacentRoads(prevId);
+                    if (roadsFromPrev != null) {
+                        Road connectingRoad = roadsFromPrev.stream()
+                                .filter(r -> r.getToCity() != null && r.getToCity().equals(currentIdFinal))
                                 .findFirst().orElse(null);
                         if (connectingRoad != null) {
                             finalDistance += connectingRoad.getDistance();
                         }
                     }
                 }
-                curr = prevNode;
+                currId = prevId;
             }
         }
 
-        double finalTime = distances.get(endCityId) == Double.POSITIVE_INFINITY ? 0 : distances.get(endCityId);
+        double finalTime = (distances.get(endCityId) == Double.POSITIVE_INFINITY) ? 0 : distances.get(endCityId);
         double totalTravelMinutes = finalTime * 60.0;
 
         ShortestPathResponse response = new ShortestPathResponse();

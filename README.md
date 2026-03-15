@@ -1,4 +1,4 @@
-# Traffic Route Optimizer
+# TrafficOptimizer
 
 A full-stack application for optimizing traffic routes using Dijkstra's algorithm.
 

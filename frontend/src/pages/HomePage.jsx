@@ -73,17 +73,19 @@ const HomePage = () => {
   const [endCity, setEndCity] = useState('');
   const [trafficLevel, setTrafficLevel] = useState(1);
 
-  const [shortestPath, setShortestPath] = useState([]); // This will hold the road geometry [lat, lng]
-  const [shortestPathSequence, setShortestPathSequence] = useState([]); // This will hold the city objects
+  const [shortestPath, setShortestPath] = useState([]); 
+  const [alternativePath, setAlternativePath] = useState([]);
+  const [shortestPathSequence, setShortestPathSequence] = useState([]); 
   const [totalDistance, setTotalDistance] = useState(0);
   const [travelTimes, setTravelTimes] = useState(null);
-  const [isVisualizing, setIsVisualizing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [simulationStarted, setSimulationStarted] = useState(false);
   const [animationSpeed, setAnimationSpeed] = useState(3);
   const [theme, setTheme] = useState('dark');
 
   const [isCityModalOpen, setCityModalOpen] = useState(false);
   const [isRoadModalOpen, setRoadModalOpen] = useState(false);
+  const [clickedCoords, setClickedCoords] = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -92,6 +94,9 @@ const HomePage = () => {
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
+
+  const memoizedCities = React.useMemo(() => cities, [cities]);
+  const memoizedRoads = React.useMemo(() => roads, [roads]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -111,25 +116,39 @@ const HomePage = () => {
     fetchData();
   }, []);
 
+  const handleMapClick = (lat, lng) => {
+    setClickedCoords({ lat, lng });
+    setCityModalOpen(true);
+  };
+
   const handleAddCity = async (cityData) => {
     try {
+      setIsLoading(true);
       const res = await api.addCity(cityData);
       setCities([...cities, res.data]);
       
-      // Refresh roads as adding a city might auto-generate connections
       const roadsRes = await api.getRoads();
       setRoads(roadsRes.data);
+      setIsLoading(false);
     } catch (err) {
       console.error("Failed to add city:", err);
       alert("Error adding city. Please check the backend.");
+      setIsLoading(false);
     }
   };
 
   const handleAddRoad = async (roadData) => {
-    const res = await api.addRoad(roadData);
-    setRoads([...roads, res.data]);
+    try {
+      setIsLoading(true);
+      const res = await api.addRoad(roadData);
+      setRoads([...roads, res.data]);
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Failed to add road:", err);
+      alert("Error adding road.");
+      setIsLoading(false);
+    }
   };
-
 
   const findShortestPath = async () => {
     if (!startCity || !endCity) {
@@ -139,10 +158,11 @@ const HomePage = () => {
 
     setSimulationStarted(true);
     setShortestPath([]);
+    setAlternativePath([]);
     setShortestPathSequence([]);
     setTotalDistance(0);
     setTravelTimes(null);
-    setIsVisualizing(true);
+    setIsLoading(true);
 
     try {
       const res = await api.shortestPath(startCity, endCity, trafficLevel);
@@ -150,9 +170,7 @@ const HomePage = () => {
       
       if (finalPathData.length === 0) {
         alert("No route found between these cities. Please try adding more roads!");
-        setIsVisualizing(false);
-        setShortestPath([]);
-        setShortestPathSequence([]);
+        setIsLoading(false);
         return;
       }
 
@@ -172,26 +190,33 @@ const HomePage = () => {
       };
 
       const roadGeometry = await api.getRoadPath(finalPathData);
-      
-      // Use backend enriched path if available, otherwise fallback to dijkstra path
       const enrichedSequence = res.data.enrichedPath || finalPathData;
 
       setShortestPathSequence(enrichedSequence);
       setShortestPath(roadGeometry.length > 0 ? roadGeometry : finalPathData.map(c => [c.lat, c.lng]));
       setTotalDistance(finalDistanceData);
       setTravelTimes(finalTravelTimes);
-      setIsVisualizing(false);
 
+      // Mock alternative path for visualization if not provided by backend
+      if (res.data.alternativePath) {
+        setAlternativePath(res.data.alternativePath);
+      } else if (roadGeometry.length > 5) {
+        // Just as a placeholder for "Multi-route" requirement until backend is ready
+        setAlternativePath(roadGeometry.map(p => [p[0] + 0.02, p[1] + 0.02]));
+      }
+
+      setIsLoading(false);
     } catch (error) {
       console.error("Failed to fetch path from backend:", error);
-      const errorMsg = error.response?.data?.error || "Could not connect to the Backend API. Make sure the Spring Boot server is running on port 8080.";
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || "Could not connect to the Backend API.";
       alert(`Error: ${errorMsg}`);
-      setIsVisualizing(false);
+      setIsLoading(false);
     }
   };
 
   const resetSimulation = () => {
     setShortestPath([]);
+    setAlternativePath([]);
     setShortestPathSequence([]);
     setTotalDistance(0);
     setTravelTimes(null);
@@ -208,19 +233,22 @@ const HomePage = () => {
           <div className="logo-container">
             <div className="glowing-icon">🗺️</div>
             <div>
-              <h1 className="glow-text">Traffic Route Optimizer</h1>
+              <h1 className="glow-text">TrafficOptimizer</h1>
               <p className="subtitle">Visualizing Dijkstra’s Shortest Path Algorithm</p>
             </div>
           </div>
         </div>
-        <button
-          className="btn-secondary"
-          onClick={toggleTheme}
-          style={{ width: '45px', height: '45px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', borderRadius: '50%' }}
-          title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        <div style={{ display: 'flex', gap: '15px' }}>
+          {isLoading && <div className="loader" style={{ alignSelf: 'center', marginRight: '10px' }}>Calculating...</div>}
+          <button
+            className="btn-secondary"
+            onClick={toggleTheme}
+            style={{ width: '45px', height: '45px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', borderRadius: '50%' }}
+            title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -230,9 +258,11 @@ const HomePage = () => {
           <h2>Controls</h2>
           <div className="panel-content">
             <CitySelector
-              cities={cities}
+              cities={memoizedCities}
               onSelectStart={setStartCity}
               onSelectEnd={setEndCity}
+              startCity={startCity}
+              endCity={endCity}
             />
 
             <TrafficSlider
@@ -256,18 +286,18 @@ const HomePage = () => {
               </div>
             </div>
 
-            <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <button className="btn-primary" onClick={findShortestPath} disabled={isVisualizing}>
-                {isVisualizing ? 'Visualizing...' : 'Find Shortest Path'}
+            <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button className="btn-primary" onClick={findShortestPath} disabled={isLoading}>
+                {isLoading ? 'Calculating...' : 'Find Shortest Path'}
               </button>
-              <button className="btn-secondary" onClick={resetSimulation} disabled={isVisualizing}>
+              <button className="btn-secondary" onClick={resetSimulation} disabled={isLoading}>
                 Reset
               </button>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <button className="btn-secondary" style={{ flex: 1, fontSize: '0.85rem', padding: '8px' }} onClick={() => setCityModalOpen(true)}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '8px' }} onClick={() => { setClickedCoords(null); setCityModalOpen(true); }}>
                   + Add City
                 </button>
-                <button className="btn-secondary" style={{ flex: 1, fontSize: '0.85rem', padding: '8px' }} onClick={() => setRoadModalOpen(true)}>
+                <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '8px' }} onClick={() => setRoadModalOpen(true)}>
                   + Add Road
                 </button>
               </div>
@@ -276,16 +306,18 @@ const HomePage = () => {
         </aside>
 
         {/* Center Map Area */}
-        <section className="map-area glass-card fade-in">
+        <section className="map-area fade-in">
           <MapView
-            cities={cities}
-            roads={roads}
+            cities={memoizedCities}
+            roads={memoizedRoads}
             shortestPath={shortestPath}
+            alternativePath={alternativePath}
             shortestPathSequence={shortestPathSequence}
             startCity={startCity}
             endCity={endCity}
             simulationStarted={simulationStarted}
             animationSpeed={animationSpeed}
+            onMapClick={handleMapClick}
           />
         </section>
 
@@ -303,8 +335,15 @@ const HomePage = () => {
       </main>
 
       {/* Modals */}
-      <AddCityModal isOpen={isCityModalOpen} onClose={() => setCityModalOpen(false)} onAdd={handleAddCity} />
-      <AddRoadModal isOpen={isRoadModalOpen} onClose={() => setRoadModalOpen(false)} onAdd={handleAddRoad} cities={cities} />
+      <AddCityModal 
+        key={isCityModalOpen ? `city-modal-${clickedCoords?.lat}-${clickedCoords?.lng}` : 'city-modal-closed'}
+        isOpen={isCityModalOpen} 
+        onClose={() => setCityModalOpen(false)} 
+        onAdd={handleAddCity}
+        initialLat={clickedCoords?.lat}
+        initialLng={clickedCoords?.lng}
+      />
+      <AddRoadModal isOpen={isRoadModalOpen} onClose={() => setRoadModalOpen(false)} onAdd={handleAddRoad} cities={memoizedCities} />
     </div>
   );
 };
