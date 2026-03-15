@@ -23,6 +23,9 @@ public class RoadController {
 
     @PostMapping
     public Road addRoad(@RequestBody Road road) {
+        if (road.getDistance() <= 0) {
+            throw new IllegalArgumentException("Distance must be positive");
+        }
         return graphService.addRoad(road);
     }
 }

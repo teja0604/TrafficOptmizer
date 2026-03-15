@@ -50,6 +50,10 @@ public class DijkstraAlgorithm {
             List<Road> adjacentRoads = graph.getAdjacentRoads(u);
             if (adjacentRoads == null) continue;
 
+            if (!graph.getCities().containsKey(u)) {
+                continue;
+            }
+
             for (Road road : adjacentRoads) {
                 Long v = road.getToCity();
                 if (v == null) continue;

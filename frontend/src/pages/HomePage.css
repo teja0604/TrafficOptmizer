@@ -206,20 +206,20 @@
   }
   
   /* When panels are hidden, map area should take full height */
-  .left-panel.mobile-hidden + .map-area + .right-panel.mobile-hidden {
-     /* This selector won't target the map-area in between correctly in standard flex-flow order */
-  }
 
   /* Corrected logic: Use a simpler approach if panels are hidden */
-  .main-content:has(.mobile-hidden) .map-area {
-     height: calc(100vh - var(--header-height));
-  }
   
   .map-area .btn-overlay {
     top: 10px !important;
     right: 10px !important;
     padding: 8px 12px !important;
     font-size: 0.8rem !important;
+  }
+
+  .controls {
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
   }
 }
 

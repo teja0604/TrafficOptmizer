@@ -5,6 +5,12 @@ const AddCityModal = ({ isOpen, onClose, onAdd, initialLat, initialLng }) => {
   const [lat, setLat] = useState(initialLat ? String(initialLat) : '');
   const [lng, setLng] = useState(initialLng ? String(initialLng) : '');
 
+  // Fix: Synchronize state with props when他们 change
+  React.useEffect(() => {
+    if (initialLat !== undefined && initialLat !== null) setLat(String(initialLat));
+    if (initialLng !== undefined && initialLng !== null) setLng(String(initialLng));
+  }, [initialLat, initialLng]);
+
   // Reset name when lng/lat changes (optional, but keep for reset logic when re-mounting)
   // We'll rely on key-based re-mounting in the parent for a cleaner fix.
 
