@@ -5,22 +5,22 @@ import jakarta.persistence.*;
 @Entity
 public class City {
     @Id
-    @Column(columnDefinition = "VARCHAR(255)")
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     private String name;
     private double latitude;
     private double longitude;
 
     public City() {}
-    public City(String id, String name, double latitude, double longitude) {
+    public City(Long id, String name, double latitude, double longitude) {
         this.id = id;
         this.name = name;
         this.latitude = latitude;
         this.longitude = longitude;
     }
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

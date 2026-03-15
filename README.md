@@ -1,16 +1,43 @@
-# React + Vite
+# Traffic Route Optimizer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A full-stack application for optimizing traffic routes using Dijkstra's algorithm.
 
-Currently, two official plugins are available:
+## Features
+- Interactive map for visualizing cities and roads.
+- Shortest path calculation considering traffic levels.
+- Real-time city and road management.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Prerequisites
+- **Node.js** (v18+)
+- **Java** (v17+)
+- **MySQL** (v8+)
 
-## React Compiler
+## Setup & Running
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Backend
+1. Create a MySQL database named `route_optimizer`.
+2. Configure environment variables (optional, defaults provided):
+   - `DB_URL`, `DB_USER`, `DB_PASSWORD`, `ALLOWED_ORIGINS`
+3. Run with Maven:
+   ```bash
+   cd backend
+   ./mvnw spring-boot:run
+   ```
 
-## Expanding the ESLint configuration
+### Frontend
+1. Install dependencies:
+   ```bash
+   cd frontend
+   npm install
+   ```
+2. Configure environment variables (optional, defaults provided):
+   - `VITE_API_URL`
+3. Run in development:
+   ```bash
+   npm run dev
+   ```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Deployment
+1. **Frontend**: Run `npm run build` and deploy the `dist` folder to any static hosting.
+2. **Backend**: Run `./mvnw package` and deploy the generated JAR to a Java-compatible server.
+

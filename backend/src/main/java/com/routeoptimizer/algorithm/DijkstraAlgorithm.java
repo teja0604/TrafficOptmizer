@@ -10,12 +10,14 @@ import java.util.*;
 @Component
 public class DijkstraAlgorithm {
 
-    public ShortestPathResponse findShortestPath(Graph graph, String startCityId, String endCityId, double trafficLevel) {
-        Map<String, Double> distances = new HashMap<>();
-        Map<String, String> previous = new HashMap<>();
-        PriorityQueue<String> pq = new PriorityQueue<>(Comparator.comparingDouble(distances::get));
+    public ShortestPathResponse findShortestPath(Graph graph, Long startCityId, Long endCityId, double trafficLevel) {
+        Map<Long, Double> distances = new HashMap<>();
+        Map<Long, Long> previous = new HashMap<>();
+        PriorityQueue<Long> pq = new PriorityQueue<>(Comparator.comparingDouble(distances::get));
 
-        for (String cityId : graph.getCities().keySet()) {
+        Set<Long> visited = new HashSet<>();
+
+        for (Long cityId : graph.getCities().keySet()) {
             distances.put(cityId, Double.POSITIVE_INFINITY);
             previous.put(cityId, null);
         }
@@ -23,18 +25,23 @@ public class DijkstraAlgorithm {
         pq.add(startCityId);
 
         while (!pq.isEmpty()) {
-            String current = pq.poll();
+            Long current = pq.poll();
 
             if (current.equals(endCityId)) {
                 break;
             }
+
+            if (visited.contains(current)) {
+                continue;
+            }
+            visited.add(current);
 
             List<Road> adjacentRoads = graph.getAdjacentRoads(current);
             if (adjacentRoads == null)
                 continue;
 
             for (Road road : adjacentRoads) {
-                String neighbor = road.getToCity();
+                Long neighbor = road.getToCity();
                 if (neighbor == null)
                     continue;
 
@@ -44,14 +51,13 @@ public class DijkstraAlgorithm {
                 if (newDist < distances.get(neighbor)) {
                     distances.put(neighbor, newDist);
                     previous.put(neighbor, current);
-                    pq.remove(neighbor);
                     pq.add(neighbor);
                 }
             }
         }
 
         List<City> path = new ArrayList<>();
-        String curr = endCityId;
+        Long curr = endCityId;
         double finalDistance = 0.0;
 
         if (previous.get(curr) != null || curr.equals(startCityId)) {
@@ -61,9 +67,9 @@ public class DijkstraAlgorithm {
                     path.add(0, currentPathCity);
                 }
 
-                String prevNode = previous.get(curr);
+                Long prevNode = previous.get(curr);
                 if (prevNode != null) {
-                    final String c = curr;
+                    final Long c = curr;
                     List<Road> adjacentPrev = graph.getAdjacentRoads(prevNode);
                     if (adjacentPrev != null) {
                         Road connectingRoad = adjacentPrev.stream()

@@ -42,15 +42,15 @@ public class PathControllerIntegrationTest {
 
     @Test
     void testLocationAllEmpty() throws Exception {
-        mockMvc.perform(get("/api/location/all"))
+        mockMvc.perform(get("/api/cities"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
     }
 
     @Test
     void testShortestPathErrorWhenNoRoads() throws Exception {
-        City c1 = cityRepository.save(new City("1", "A", 0, 0));
-        City c2 = cityRepository.save(new City("2", "B", 1, 1));
+        City c1 = cityRepository.save(new City(null, "A", 0, 0));
+        City c2 = cityRepository.save(new City(null, "B", 1, 1));
 
         PathRequest req = new PathRequest();
         req.setStartCity(c1.getId());
@@ -65,10 +65,9 @@ public class PathControllerIntegrationTest {
 
     @Test
     void testShortestPathSuccess() throws Exception {
-        City c1 = cityRepository.save(new City("1", "A", 0, 0));
-        City c2 = cityRepository.save(new City("2", "B", 0, 1));
+        City c1 = cityRepository.save(new City(null, "A", 0, 0));
+        City c2 = cityRepository.save(new City(null, "B", 0, 1));
         Road r = new Road();
-        r.setId("r1");
         r.setFromCity(c1.getId());
         r.setToCity(c2.getId());
         r.setDistance(1);

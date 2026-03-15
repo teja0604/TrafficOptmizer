@@ -11,6 +11,7 @@ import { api } from '../services/api';
 
 
 // Initial Mock Data
+// Initial Mock Data Expanded
 const initialCities = [
   { id: '1', name: 'Hyderabad', lat: 17.3850, lng: 78.4867 },
   { id: '2', name: 'Bangalore', lat: 12.9716, lng: 77.5946 },
@@ -22,6 +23,26 @@ const initialCities = [
   { id: '8', name: 'Pune', lat: 18.5204, lng: 73.8567 },
   { id: '9', name: 'Jaipur', lat: 26.9124, lng: 75.7873 },
   { id: '10', name: 'Nagpur', lat: 21.1458, lng: 79.0882 },
+  { id: '11', name: 'Lucknow', lat: 26.8467, lng: 80.9462 },
+  { id: '12', name: 'Visakhapatnam', lat: 17.6868, lng: 83.2185 },
+  { id: '13', name: 'Patna', lat: 25.5941, lng: 85.1376 },
+  { id: '14', name: 'Bhopal', lat: 23.2599, lng: 77.4126 },
+  { id: '15', name: 'Ludhiana', lat: 30.9010, lng: 75.8573 },
+  { id: '16', name: 'Agra', lat: 27.1767, lng: 78.0081 },
+  { id: '17', name: 'Nashik', lat: 19.9975, lng: 73.7898 },
+  { id: '18', name: 'Vijayawada', lat: 16.5062, lng: 80.6480 },
+  { id: '19', name: 'Madurai', lat: 9.9252, lng: 78.1198 },
+  { id: '20', name: 'Varanasi', lat: 25.3176, lng: 82.9739 },
+  { id: '21', name: 'Coimbatore', lat: 11.0168, lng: 76.9558 },
+  { id: '22', name: 'Kochi', lat: 9.9312, lng: 76.2673 },
+  { id: '23', name: 'Thiruvananthapuram', lat: 8.5241, lng: 76.9366 },
+  { id: '24', name: 'Mysuru', lat: 12.2958, lng: 76.6394 },
+  { id: '25', name: 'Guwahati', lat: 26.1158, lng: 91.7086 },
+  { id: '26', name: 'Bhubaneswar', lat: 20.2961, lng: 85.8245 },
+  { id: '27', name: 'Raipur', lat: 21.2514, lng: 81.6296 },
+  { id: '28', name: 'Chandigarh', lat: 30.7333, lng: 76.7794 },
+  { id: '29', name: 'Indore', lat: 22.7196, lng: 75.8577 },
+  { id: '30', name: 'Surat', lat: 21.1702, lng: 72.8311 },
 ];
 
 const initialRoads = [
@@ -37,6 +58,11 @@ const initialRoads = [
   { from: '10', to: '7', distance: 1130 },
   { from: '3', to: '7', distance: 1670 },
   { from: '4', to: '5', distance: 1420 },
+  { from: '3', to: '12', distance: 800 },
+  { from: '12', to: '7', distance: 880 },
+  { from: '7', to: '13', distance: 580 },
+  { from: '13', to: '11', distance: 500 },
+  { from: '11', to: '5', distance: 500 },
 ];
 
 const HomePage = () => {
@@ -47,14 +73,10 @@ const HomePage = () => {
   const [endCity, setEndCity] = useState('');
   const [trafficLevel, setTrafficLevel] = useState(1);
 
-  const [shortestPath, setShortestPath] = useState([]);
-  const [visitedNodes, setVisitedNodes] = useState([]);
-  const [visitedEdges, setVisitedEdges] = useState([]);
-  const [evaluatingEdge, setEvaluatingEdge] = useState(null);
+  const [shortestPath, setShortestPath] = useState([]); // This will hold the road geometry [lat, lng]
+  const [shortestPathSequence, setShortestPathSequence] = useState([]); // This will hold the city objects
   const [totalDistance, setTotalDistance] = useState(0);
   const [travelTimes, setTravelTimes] = useState(null);
-  const [algoSteps, setAlgoSteps] = useState([]);
-  const [currentStepIdx, setCurrentStepIdx] = useState(-1);
   const [isVisualizing, setIsVisualizing] = useState(false);
   const [simulationStarted, setSimulationStarted] = useState(false);
   const [animationSpeed, setAnimationSpeed] = useState(3);
@@ -75,12 +97,13 @@ const HomePage = () => {
     const fetchData = async () => {
       try {
         const citiesRes = await api.getCities();
-        setCities(citiesRes.data);
+        const finalCities = citiesRes.data.length > 0 ? citiesRes.data : initialCities;
+        setCities(finalCities);
+        
         const roadsRes = await api.getRoads();
-        setRoads(roadsRes.data);
+        setRoads(roadsRes.data.length > 0 ? roadsRes.data : initialRoads);
       } catch (err) {
         console.error("Failed to load graph data:", err);
-        // Fallback to initial mock data if backend not running
         setCities(initialCities);
         setRoads(initialRoads);
       }
@@ -89,14 +112,24 @@ const HomePage = () => {
   }, []);
 
   const handleAddCity = async (cityData) => {
-    const res = await api.addCity(cityData);
-    setCities([...cities, res.data]);
+    try {
+      const res = await api.addCity(cityData);
+      setCities([...cities, res.data]);
+      
+      // Refresh roads as adding a city might auto-generate connections
+      const roadsRes = await api.getRoads();
+      setRoads(roadsRes.data);
+    } catch (err) {
+      console.error("Failed to add city:", err);
+      alert("Error adding city. Please check the backend.");
+    }
   };
 
   const handleAddRoad = async (roadData) => {
     const res = await api.addRoad(roadData);
     setRoads([...roads, res.data]);
   };
+
 
   const findShortestPath = async () => {
     if (!startCity || !endCity) {
@@ -105,75 +138,66 @@ const HomePage = () => {
     }
 
     setSimulationStarted(true);
-    // reset state
     setShortestPath([]);
-    setVisitedNodes([]);
-    setVisitedEdges([]);
-    setEvaluatingEdge(null);
+    setShortestPathSequence([]);
     setTotalDistance(0);
     setTravelTimes(null);
-    setCurrentStepIdx(-1);
     setIsVisualizing(true);
 
     try {
-      // Pull frames from the Spring Boot API
       const res = await api.shortestPath(startCity, endCity, trafficLevel);
-      const frames = res.data.steps || [];
       const finalPathData = res.data.path || [];
+      
+      if (finalPathData.length === 0) {
+        alert("No route found between these cities. Please try adding more roads!");
+        setIsVisualizing(false);
+        setShortestPath([]);
+        setShortestPathSequence([]);
+        return;
+      }
+
       const finalDistanceData = res.data.distance || 0;
-      // Calculate specific transport times using the optimal totalTravelMinutes (based on Car logic 60km/h baseline)
       const baseMinutes = res.data.totalTravelMinutes || 0;
-      const finalTravelTimes = {
-        car: baseMinutes / 60,                // Baseline
-        bus: (baseMinutes * 1.5) / 60,        // Buses are 50% slower
-        bike: (baseMinutes * 0.8) / 60        // Bikes are 20% faster through traffic
+      
+      const formatTime = (totalMinutes) => {
+        const h = Math.floor(totalMinutes / 60);
+        const m = Math.round(totalMinutes % 60);
+        return `${h > 0 ? `${h} hours ` : ''}${m} minutes`;
       };
 
-      setAlgoSteps(frames.map(f => ({ message: f.message })));
+      const finalTravelTimes = {
+        car: formatTime(baseMinutes),
+        bus: formatTime(baseMinutes * 1.5),
+        bike: formatTime(baseMinutes * 0.8)
+      };
 
-      let step = 0;
-      const interval = setInterval(() => {
-        if (step < frames.length) {
-          const frame = frames[step];
-          setCurrentStepIdx(step);
-          setVisitedNodes(frame.visitedNodes);
-          setVisitedEdges(frame.visitedEdges);
-          setEvaluatingEdge(frame.evaluatingEdge);
+      const roadGeometry = await api.getRoadPath(finalPathData);
+      
+      // Use backend enriched path if available, otherwise fallback to dijkstra path
+      const enrichedSequence = res.data.enrichedPath || finalPathData;
 
-          if (frame.isComplete) {
-            setShortestPath(finalPathData);
-            setTotalDistance(finalDistanceData);
-            setTravelTimes(finalTravelTimes);
-            clearInterval(interval);
-            setIsVisualizing(false);
-          }
+      setShortestPathSequence(enrichedSequence);
+      setShortestPath(roadGeometry.length > 0 ? roadGeometry : finalPathData.map(c => [c.lat, c.lng]));
+      setTotalDistance(finalDistanceData);
+      setTravelTimes(finalTravelTimes);
+      setIsVisualizing(false);
 
-          step++;
-        } else {
-          clearInterval(interval);
-          setShortestPath(finalPathData);
-          setTotalDistance(finalDistanceData);
-          setTravelTimes(finalTravelTimes);
-          setIsVisualizing(false);
-        }
-      }, 800 / animationSpeed);
     } catch (error) {
       console.error("Failed to fetch path from backend:", error);
-      alert("Error: Could not connect to the Backend API. Make sure the Spring Boot server is running on port 8080.");
+      const errorMsg = error.response?.data?.error || "Could not connect to the Backend API. Make sure the Spring Boot server is running on port 8080.";
+      alert(`Error: ${errorMsg}`);
       setIsVisualizing(false);
     }
   };
 
   const resetSimulation = () => {
     setShortestPath([]);
-    setVisitedNodes([]);
-    setVisitedEdges([]);
-    setEvaluatingEdge(null);
+    setShortestPathSequence([]);
     setTotalDistance(0);
     setTravelTimes(null);
-    setCurrentStepIdx(-1);
-    setAlgoSteps([]);
     setSimulationStarted(false);
+    setStartCity('');
+    setEndCity('');
   };
 
   return (
@@ -257,11 +281,9 @@ const HomePage = () => {
             cities={cities}
             roads={roads}
             shortestPath={shortestPath}
+            shortestPathSequence={shortestPathSequence}
             startCity={startCity}
             endCity={endCity}
-            visitedNodes={visitedNodes}
-            visitedEdges={visitedEdges}
-            evaluatingEdge={evaluatingEdge}
             simulationStarted={simulationStarted}
             animationSpeed={animationSpeed}
           />
@@ -269,12 +291,13 @@ const HomePage = () => {
 
         {/* Right Algorithm Info Panel */}
         <aside className="right-panel glass-card slide-in-right">
-          <h2>Algorithm Visualizer</h2>
+          <h2>Summary</h2>
           <div className="panel-content">
-            <AlgorithmVisualizer steps={algoSteps} currentStepIdx={currentStepIdx} />
-            {!isVisualizing && shortestPath.length > 0 && (
-              <ResultPanel shortestPath={shortestPath} totalDistance={totalDistance} travelTimes={travelTimes} />
-            )}
+            <AlgorithmVisualizer 
+              shortestPathSequence={shortestPathSequence} 
+              totalDistance={totalDistance} 
+              travelTimes={travelTimes} 
+            />
           </div>
         </aside>
       </main>

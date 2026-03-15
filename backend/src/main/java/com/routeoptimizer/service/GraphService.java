@@ -12,6 +12,11 @@ import org.springframework.stereotype.Service;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.Comparator;
+import org.springframework.web.client.RestTemplate;
 
 @Service
 public class GraphService {
@@ -58,6 +63,15 @@ public class GraphService {
                         road.setRoadType("NH");
                     }
                     addRoad(road);
+
+                    // Also add the reverse road for consistency in DB
+                    Road reverseRoad = new Road();
+                    reverseRoad.setFromCity(existingCity.getId());
+                    reverseRoad.setToCity(savedCity.getId());
+                    reverseRoad.setDistance(distance);
+                    reverseRoad.setTrafficLevel(0.1);
+                    reverseRoad.setRoadType(road.getRoadType());
+                    addRoad(reverseRoad);
                 }
             }
         }
@@ -122,21 +136,6 @@ public class GraphService {
             if (r.getFromCity() != null && r.getToCity() != null &&
                     graph.getCities().containsKey(r.getFromCity()) &&
                     graph.getCities().containsKey(r.getToCity())) {
-                
-                if (r.getRoadType() == null || r.getRoadType().trim().isEmpty()) {
-                    r.setRoadType("SH");
-                }
-                r.setRoadType(r.getRoadType().toUpperCase());
-                
-                if (r.getSpeedLimit() <= 0) {
-                    double speed = ROAD_SPEEDS.getOrDefault(r.getRoadType(), 60.0);
-                    r.setSpeedLimit(speed);
-                }
-                
-                if (r.getTravelTime() <= 0 && r.getDistance() > 0) {
-                    r.setTravelTime(r.getDistance() / r.getSpeedLimit());
-                }
-
                 graph.addRoad(r);
                 validRoads++;
             } else {
@@ -148,7 +147,7 @@ public class GraphService {
         return graph;
     }
 
-    public ShortestPathResponse findShortestPath(String startCityId, String endCityId, double trafficLevel) {
+    public ShortestPathResponse findShortestPath(Long startCityId, Long endCityId, double trafficLevel) {
         if (roadRepository.count() == 0) {
             ShortestPathResponse errorResp = new ShortestPathResponse();
             errorResp.setError("No road connections exist between cities");
@@ -160,6 +159,114 @@ public class GraphService {
             errorResp.setError("Start or end city does not exist in graph.");
             return errorResp;
         }
-        return dijkstraAlgorithm.findShortestPath(graph, startCityId, endCityId, trafficLevel);
+        ShortestPathResponse resp = dijkstraAlgorithm.findShortestPath(graph, startCityId, endCityId, trafficLevel);
+        
+        if (resp.getPath() != null && resp.getPath().size() >= 2) {
+            List<City> enriched = detectIntermediateWaypoints(resp.getPath());
+            resp.setEnrichedPath(enriched);
+        }
+        
+        return resp;
+    }
+
+    private List<City> detectIntermediateWaypoints(List<City> dijkstraPath) {
+        // 1. Call OSRM to get detailed geometry
+        List<double[]> geometry = fetchOSRMGeometry(dijkstraPath);
+        if (geometry.isEmpty()) return dijkstraPath;
+
+        // 2. Rank ALL cities (including Dijkstra nodes) along the geometry
+        List<City> allCities = cityRepository.findAll();
+        List<CityWithRank> ranked = new ArrayList<>();
+        
+        // We'll use a 20km threshold for "important" intermediate cities
+        double thresholdKm = 20.0;
+        Set<Long> dijkstraIds = dijkstraPath.stream().map(City::getId).collect(Collectors.toSet());
+
+        for (City city : allCities) {
+            int bestIdx = -1;
+            double minDist = Double.MAX_VALUE;
+            
+            // Check proximity to any sampled point on the OSRM geometry
+            for (int i = 0; i < geometry.size(); i += 5) {
+                double dist = calculateHaversineDistance(geometry.get(i)[0], geometry.get(i)[1], city.getLatitude(), city.getLongitude());
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestIdx = i;
+                }
+            }
+
+            // Include if it's a Dijkstra city OR very close to the road
+            if (dijkstraIds.contains(city.getId()) || minDist < thresholdKm) {
+                ranked.add(new CityWithRank(city, bestIdx));
+            }
+        }
+
+        // 3. Sort by their progression along the road geometry
+        ranked.sort(Comparator.comparingInt(r -> r.rank));
+
+        // 4. Extract cities and ensure start/end are kept
+        List<City> uniqueCities = ranked.stream()
+                .map(r -> r.city)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (uniqueCities.size() <= 15) return uniqueCities;
+
+        // If too many, keep start, end, and some middle ones
+        List<City> result = new ArrayList<>();
+        result.add(uniqueCities.get(0)); // Start
+        
+        int step = (uniqueCities.size() - 2) / 13;
+        for (int i = 1; i < uniqueCities.size() - 1; i += Math.max(1, step)) {
+            result.add(uniqueCities.get(i));
+            if (result.size() >= 14) break;
+        }
+        
+        if (!result.contains(uniqueCities.get(uniqueCities.size() - 1))) {
+            result.add(uniqueCities.get(uniqueCities.size() - 1)); // End
+        }
+        
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<double[]> fetchOSRMGeometry(List<City> path) {
+        try {
+            String coords = path.stream()
+                .map(c -> c.getLongitude() + "," + c.getLatitude())
+                .collect(Collectors.joining(";"));
+            
+            String url = "http://router.project-osrm.org/route/v1/driving/" + coords + "?overview=full&geometries=geojson";
+            
+            org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(3000);
+            factory.setReadTimeout(3000);
+            RestTemplate restTemplate = new RestTemplate(factory);
+            
+            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            
+            if (response != null && response.containsKey("routes")) {
+                List<Map<String, Object>> routes = (List<Map<String, Object>>) response.get("routes");
+                if (!routes.isEmpty()) {
+                    Map<String, Object> geometry = (Map<String, Object>) routes.get(0).get("geometry");
+                    List<List<Double>> coordsList = (List<List<Double>>) geometry.get("coordinates");
+                    return coordsList.stream()
+                        .map(c -> new double[]{c.get(1), c.get(0)}) // OSRM is [lng, lat]
+                        .collect(Collectors.toList());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("OSRM call failed: " + e.getMessage());
+        }
+        return java.util.Collections.emptyList();
+    }
+
+    private static class CityWithRank {
+        City city;
+        int rank;
+        CityWithRank(City city, int rank) {
+            this.city = city;
+            this.rank = rank;
+        }
     }
 }

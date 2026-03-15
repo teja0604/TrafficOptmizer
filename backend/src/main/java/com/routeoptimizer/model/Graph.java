@@ -6,15 +6,15 @@ import java.util.List;
 import java.util.Map;
 
 public class Graph {
-    private final Map<String, City> cities = new HashMap<>();
+    private final Map<Long, City> cities = new HashMap<>();
     private final List<Road> roads = new ArrayList<>();
 
     // Adjacency list: cityId -> List of Roads originating from that city
-    private final Map<String, List<Road>> adjacencyList = new HashMap<>();
+    private final Map<Long, List<Road>> adjacencyList = new HashMap<>();
 
-    public Map<String, City> getCities() { return cities; }
+    public Map<Long, City> getCities() { return cities; }
     public List<Road> getRoads() { return roads; }
-    public Map<String, List<Road>> getAdjacencyList() { return adjacencyList; }
+    public Map<Long, List<Road>> getAdjacencyList() { return adjacencyList; }
 
     public void addCity(City city) {
         cities.put(city.getId(), city);
@@ -33,7 +33,7 @@ public class Graph {
         adjacencyList.get(road.getToCity()).add(reverseRoad);
     }
 
-    public List<Road> getAdjacentRoads(String cityId) {
+    public List<Road> getAdjacentRoads(Long cityId) {
         return adjacencyList.getOrDefault(cityId, new ArrayList<>());
     }
 }

@@ -5,12 +5,10 @@ import jakarta.persistence.*;
 @Entity
 public class Road {
     @Id
-    @Column(columnDefinition = "VARCHAR(255)")
-    private String id;
-    @Column(columnDefinition = "VARCHAR(255)")
-    private String fromCity;
-    @Column(columnDefinition = "VARCHAR(255)")
-    private String toCity;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private Long fromCity;
+    private Long toCity;
     private double distance;
     private double trafficLevel;
 
@@ -20,7 +18,7 @@ public class Road {
 
     public Road() {}
 
-    public Road(String id, String fromCity, String toCity, double distance, double trafficLevel,
+    public Road(Long id, Long fromCity, Long toCity, double distance, double trafficLevel,
                 String roadType, double speedLimit, double travelTime) {
         this.id = id;
         this.fromCity = fromCity;
@@ -33,12 +31,12 @@ public class Road {
     }
 
     // getters/setters for all fields...
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getFromCity() { return fromCity; }
-    public void setFromCity(String fromCity) { this.fromCity = fromCity; }
-    public String getToCity() { return toCity; }
-    public void setToCity(String toCity) { this.toCity = toCity; }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Long getFromCity() { return fromCity; }
+    public void setFromCity(Long fromCity) { this.fromCity = fromCity; }
+    public Long getToCity() { return toCity; }
+    public void setToCity(Long toCity) { this.toCity = toCity; }
     public double getDistance() { return distance; }
     public void setDistance(double distance) { this.distance = distance; }
     public double getTrafficLevel() { return trafficLevel; }

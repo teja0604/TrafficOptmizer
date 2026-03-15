@@ -1,7 +1,6 @@
 package com.routeoptimizer.controller;
 
 import com.routeoptimizer.algorithm.ShortestPathResponse;
-import com.routeoptimizer.controller.PathRequest;
 import com.routeoptimizer.model.Graph;
 import com.routeoptimizer.service.GraphService;
 import org.springframework.http.ResponseEntity;

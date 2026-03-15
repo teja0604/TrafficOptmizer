@@ -1,37 +1,76 @@
 import React from 'react';
 import './components.css';
 
-const AlgorithmVisualizer = ({ steps, currentStepIdx }) => {
-  if (!steps || steps.length === 0) {
+const AlgorithmVisualizer = ({ shortestPathSequence, totalDistance, travelTimes }) => {
+  if (!shortestPathSequence || shortestPathSequence.length === 0) {
     return (
       <div style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '20px' }}>
-        Select a start and destination city, then click "Find Shortest Path" to see the algorithm in action!
+        Select a start and destination city, then click "Find Shortest Path" to see the optimal road route!
       </div>
     );
   }
 
   return (
     <div className="algorithm-visualizer">
-      <h3 style={{ marginBottom: '15px', color: 'var(--text-primary)' }}>Algorithm Steps</h3>
-      <div className="steps-container">
-        {steps.map((step, idx) => {
-          let className = 'algo-step-card slide-in-right';
-          if (idx === currentStepIdx) className += ' active glowing-border';
-          else if (idx < currentStepIdx) className += ' completed';
-          
-          if (idx > currentStepIdx) return null;
+      <h3 style={{ marginBottom: '15px', color: 'var(--accent-cyan)' }}>Shortest Route Details</h3>
+      
+      <div className="summary-card glass-card" style={{ padding: '15px', marginBottom: '20px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
+        <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', marginBottom: '15px' }}>Itinerary</h4>
+        <div style={{ 
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          color: 'var(--text-primary)', 
+          fontWeight: 600,
+          maxHeight: '400px',
+          overflowY: 'auto',
+          padding: '10px 0'
+        }}>
+          {shortestPathSequence.map((city, idx) => (
+            <React.Fragment key={city.id}>
+              <div style={{ 
+                padding: '10px 20px', 
+                background: 'rgba(0, 229, 255, 0.1)', 
+                borderRadius: '20px',
+                border: '1px solid rgba(0, 229, 255, 0.3)',
+                width: '80%',
+                textAlign: 'center',
+                boxShadow: '0 0 10px rgba(0, 229, 255, 0.1)'
+              }}>
+                {city.name}
+              </div>
+              {idx < shortestPathSequence.length - 1 && (
+                <div style={{ color: 'var(--accent-cyan)', fontSize: '1.2rem' }}>↓</div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
 
-          return (
-            <div key={idx} className={className}>
-              <div style={{ fontWeight: 600, color: idx === currentStepIdx ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>
-                Step {idx + 1}
-              </div>
-              <div className="algo-text" style={{ fontSize: '0.9rem', marginTop: '5px', whiteSpace: 'pre-wrap' }}>
-                {step.message}
-              </div>
-            </div>
-          );
-        })}
+      <div className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+        <div className="metric-box" style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Distance</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{totalDistance.toFixed(1)} km</div>
+        </div>
+      </div>
+
+      <div className="travel-times-summary">
+        <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', marginBottom: '12px' }}>Estimated Travel Times</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="time-item" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>🚗 Car</span>
+            <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{travelTimes?.car}</span>
+          </div>
+          <div className="time-item" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>🏍️ Bike</span>
+            <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{travelTimes?.bike}</span>
+          </div>
+          <div className="time-item" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>🚌 Bus</span>
+            <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{travelTimes?.bus}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
