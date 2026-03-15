@@ -2,7 +2,7 @@
   /* Colors */
   --bg-primary: #020617;
   --bg-secondary: #0f172a;
-  --bg-card: rgba(15, 23, 42, 0.6);
+  --bg-card: rgba(15, 23, 42, 0.7);
   --accent-cyan: #22d3ee;
   --accent-blue: #3b82f6;
   --accent-green: #10b981;
@@ -10,12 +10,23 @@
   
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
-  --border-color: rgba(34, 211, 238, 0.2);
+  --border-color: rgba(34, 211, 238, 0.15);
 
   /* Typography */
   --font-heading: 'Poppins', sans-serif;
   --font-body: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  /* Responsive Sizing */
+  --header-height: 70px;
+  --panel-width-left: 320px;
+  --panel-width-right: 350px;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 60px;
+  }
 }
 
 [data-theme='light'] {

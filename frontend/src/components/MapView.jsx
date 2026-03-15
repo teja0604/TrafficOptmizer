@@ -98,18 +98,9 @@ const MapView = ({ cities, shortestPath, alternativePath, shortestPathSequence, 
     <div id="map" style={{ height: '100%', width: '100%', position: 'relative' }}>
       <button
         onClick={() => setIsSatellite(!isSatellite)}
-        className="btn-secondary"
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          zIndex: 1000,
-          background: 'rgba(15, 23, 42, 0.9)',
-          color: 'var(--accent-cyan)',
-          borderColor: 'var(--accent-cyan)',
-        }}
+        className="btn-secondary btn-overlay"
       >
-        {isSatellite ? 'Standard View' : 'Satellite View'}
+        {isSatellite ? '📡 Standard' : '🛰️ Satellite'}
       </button>
 
       <MapContainer 

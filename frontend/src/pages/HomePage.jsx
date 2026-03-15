@@ -86,6 +86,7 @@ const HomePage = () => {
   const [isCityModalOpen, setCityModalOpen] = useState(false);
   const [isRoadModalOpen, setRoadModalOpen] = useState(false);
   const [clickedCoords, setClickedCoords] = useState(null);
+  const [showMobileControls, setShowMobileControls] = useState(true);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -241,6 +242,14 @@ const HomePage = () => {
         <div style={{ display: 'flex', gap: '15px' }}>
           {isLoading && <div className="loader" style={{ alignSelf: 'center', marginRight: '10px' }}>Calculating...</div>}
           <button
+            className="btn-secondary mobile-only"
+            onClick={() => setShowMobileControls(!showMobileControls)}
+            style={{ width: '45px', height: '45px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', borderRadius: '50%' }}
+            title="Toggle Controls"
+          >
+            {showMobileControls ? '🗺️' : '⚙️'}
+          </button>
+          <button
             className="btn-secondary"
             onClick={toggleTheme}
             style={{ width: '45px', height: '45px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', borderRadius: '50%' }}
@@ -254,7 +263,7 @@ const HomePage = () => {
       {/* Main Content Area */}
       <main className="main-content">
         {/* Left Control Panel */}
-        <aside className="left-panel glass-card slide-in-left">
+        <aside className={`left-panel glass-card slide-in-left ${!showMobileControls ? 'mobile-hidden' : ''}`}>
           <h2>Controls</h2>
           <div className="panel-content">
             <CitySelector
@@ -322,7 +331,7 @@ const HomePage = () => {
         </section>
 
         {/* Right Algorithm Info Panel */}
-        <aside className="right-panel glass-card slide-in-right">
+        <aside className={`right-panel glass-card slide-in-right ${!showMobileControls ? 'mobile-hidden' : ''}`}>
           <h2>Summary</h2>
           <div className="panel-content">
             <AlgorithmVisualizer 

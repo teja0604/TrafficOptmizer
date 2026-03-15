@@ -3,17 +3,18 @@
   flex-direction: column;
   height: 100vh;
   width: 100%;
-  padding: 0;
   overflow: hidden;
+  background-color: var(--bg-primary);
 }
 
 .app-header {
-  padding: 10px 20px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 70px;
-  z-index: 10;
+  height: var(--header-height);
+  z-index: 50;
+  flex-shrink: 0;
 }
 
 .header-content {
@@ -28,121 +29,214 @@
 }
 
 .logo-container h1 {
-  font-size: 1.5rem;
+  font-size: clamp(1rem, 4vw, 1.5rem);
   margin: 0;
+  white-space: nowrap;
 }
 
 .subtitle {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   margin: 0;
+  opacity: 0.8;
 }
 
 .glowing-icon {
-  font-size: 2rem;
+  font-size: clamp(1.5rem, 5vw, 2.2rem);
   filter: drop-shadow(0 0 10px var(--accent-cyan));
 }
 
 .main-content {
   display: flex;
   flex: 1;
-  height: calc(100vh - 70px);
+  height: calc(100vh - var(--header-height));
   position: relative;
+  overflow: hidden;
 }
 
+/* Base Desktop Layout (3 columns) */
 .left-panel {
-  width: 320px;
-  padding: 20px;
+  width: var(--panel-width-left);
+  padding: 24px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  z-index: 5;
-  border-right: 1px solid var(--border-color);
+  z-index: 20;
   background: var(--bg-card);
+  border-right: 1px solid var(--border-color);
 }
 
 .map-area {
   flex: 1;
   position: relative;
-  z-index: 1;
-}
-
-#map {
-  height: 100%;
-  width: 100%;
+  z-index: 10;
+  min-height: 300px;
 }
 
 .right-panel {
-  width: 350px;
-  padding: 20px;
+  width: var(--panel-width-right);
+  padding: 24px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  z-index: 5;
-  border-left: 1px solid var(--border-color);
+  z-index: 20;
   background: var(--bg-card);
+  border-left: 1px solid var(--border-color);
 }
 
-/* Responsive Mobile UI */
-@media (max-width: 1200px) {
-  .right-panel {
-    display: none; /* Hide right panel on smaller screens, can be toggled */
+/* --- Responsive Tiers --- */
+
+/* Tablet View: Show panels but adjust padding */
+@media (max-width: 1280px) {
+  .left-panel, .right-panel {
+    width: 280px;
+    padding: 16px;
   }
 }
 
+/* Middle Tier: Hide right panel to prioritize map + left controls */
+@media (max-width: 1100px) {
+  .right-panel {
+    display: none; 
+  }
+}
+
+/* Small Screens / Mobile Phones: Stack everything */
 @media (max-width: 768px) {
   .main-content {
     flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .map-area {
+    height: 50vh;
+    min-height: 350px;
+    width: 100%;
+    flex: none;
+    order: 1;
   }
 
   .left-panel {
     width: 100%;
     height: auto;
-    max-height: 40%;
+    overflow-y: visible;
     border-right: none;
-    border-bottom: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
+    padding: 20px;
     order: 2;
   }
 
-  .map-area {
-    height: 60%;
-    order: 1;
+  .right-panel {
+    display: flex; /* Show summary on mobile */
+    width: 100%;
+    height: auto;
+    overflow-y: visible;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+    padding: 20px;
+    order: 3;
+    background: var(--bg-secondary); /* Slight contrast for mobile stacking */
   }
 
-  .logo-container h1 {
-    font-size: 1.2rem;
-  }
-
+  /* Adjust header for mobile */
   .subtitle {
     display: none;
   }
-
-  .btn-secondary {
-    padding: 8px 12px;
-    font-size: 0.8rem;
+  
+  .logo-container {
+    gap: 8px;
   }
 }
 
-/* Modals */
+/* Very Small Devices */
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0 12px;
+  }
+  
+  .left-panel {
+    padding: 16px;
+  }
+
+  .map-area {
+    height: 45vh;
+    min-height: 300px;
+  }
+}
+
+/* Modals - Responsive */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(2, 6, 23, 0.8);
-  backdrop-filter: blur(5px);
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 1000;
+  padding: 20px;
 }
 
 .modal-content {
-  width: 90%;
-  max-width: 400px;
-  padding: 25px;
+  width: 100%;
+  max-width: 440px;
+  padding: clamp(20px, 5vw, 32px);
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 16px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Mobile Toggle Utilities */
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: flex !important;
+  }
+  
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  /* When panels are hidden, map area should take full height */
+  .left-panel.mobile-hidden + .map-area + .right-panel.mobile-hidden {
+     /* This selector won't target the map-area in between correctly in standard flex-flow order */
+  }
+
+  /* Corrected logic: Use a simpler approach if panels are hidden */
+  .main-content:has(.mobile-hidden) .map-area {
+     height: calc(100vh - var(--header-height));
+  }
+  
+  .map-area .btn-overlay {
+    top: 10px !important;
+    right: 10px !important;
+    padding: 8px 12px !important;
+    font-size: 0.8rem !important;
+  }
+}
+
+.map-area .btn-overlay {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.9);
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
+  transition: all 0.3s ease;
+  backdrop-filter: blur(4px);
+}
+
+.map-area .btn-overlay:hover {
+  background: var(--accent-cyan);
+  color: var(--bg-primary);
+  box-shadow: 0 0 15px var(--accent-cyan);
 }
