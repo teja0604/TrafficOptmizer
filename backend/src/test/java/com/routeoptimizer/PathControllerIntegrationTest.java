@@ -68,8 +68,8 @@ public class PathControllerIntegrationTest {
         City c1 = cityRepository.save(new City(null, "A", 0, 0));
         City c2 = cityRepository.save(new City(null, "B", 0, 1));
         Road r = new Road();
-        r.setFromCity(c1.getId());
-        r.setToCity(c2.getId());
+        r.setFromCity(c1);
+        r.setToCity(c2);
         r.setDistance(1);
         r.setTrafficLevel(0.1);
         r.setRoadType("NH");

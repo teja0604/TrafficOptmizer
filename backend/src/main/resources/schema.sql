@@ -1,18 +1,22 @@
-CREATE TABLE IF NOT EXISTS city (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255),
-    latitude DOUBLE,
-    longitude DOUBLE,
-    INDEX idx_lat_lng (latitude, longitude)
-);
+-- NOTE: This file is intentionally left as reference ONLY.
+-- Table creation is handled entirely by Hibernate (spring.jpa.hibernate.ddl-auto=update).
+-- spring.sql.init.mode=never ensures this file is NOT executed by Spring at startup.
+-- This prevents MySQL-specific syntax from breaking PostgreSQL on Render.
 
-CREATE TABLE IF NOT EXISTS road (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    from_city BIGINT,
-    to_city BIGINT,
-    distance DOUBLE,
-    traffic_level DOUBLE,
-    road_type VARCHAR(50),
-    speed_limit DOUBLE,
-    travel_time DOUBLE
-);
+-- REFERENCE SCHEMA (DO NOT EXECUTE):
+-- CREATE TABLE city (
+--     id BIGSERIAL PRIMARY KEY,   -- PostgreSQL equivalent
+--     name VARCHAR(255),
+--     latitude DOUBLE PRECISION,
+--     longitude DOUBLE PRECISION
+-- );
+-- CREATE TABLE road (
+--     id BIGSERIAL PRIMARY KEY,
+--     from_city_id BIGINT REFERENCES city(id),
+--     to_city_id BIGINT REFERENCES city(id),
+--     distance DOUBLE PRECISION,
+--     traffic_level DOUBLE PRECISION,
+--     road_type VARCHAR(50),
+--     speed_limit DOUBLE PRECISION,
+--     travel_time DOUBLE PRECISION
+-- );

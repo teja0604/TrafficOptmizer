@@ -16,7 +16,13 @@ export const api = {
     return res;
   },
   addRoad: async (roadData) => {
-    return await axios.post(`${API_BASE_URL}/roads`, roadData);
+    const payload = {
+      fromCityId: roadData.from,
+      toCityId: roadData.to,
+      distance: roadData.distance,
+      roadType: roadData.roadType
+    };
+    return await axios.post(`${API_BASE_URL}/roads`, payload);
   },
   getCities: async () => {
     const res = await axios.get(`${API_BASE_URL}/cities`);
@@ -25,7 +31,7 @@ export const api = {
   },
   getRoads: async () => {
     const res = await axios.get(`${API_BASE_URL}/roads`);
-    res.data = res.data.map(r => ({ ...r, from: r.fromCity, to: r.toCity }));
+    res.data = res.data.map(r => ({ ...r, from: r.fromCity?.id || r.fromCity, to: r.toCity?.id || r.toCity }));
     return res;
   },
   shortestPath: async (startId, endId, trafficLevel) => {
@@ -73,7 +79,7 @@ export const api = {
         const end = pathCities[i + 1];
         const coordinates = `${start.lng},${start.lat};${end.lng},${end.lat}`;
         segmentPromises.push(
-          axios.get(`http://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`)
+          axios.get(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`)
             .then(res => {
               if (res.data && res.data.routes && res.data.routes[0]) {
                 return res.data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);

@@ -24,13 +24,16 @@ public class Graph {
     public void addRoad(Road road) {
         roads.add(road);
 
-        adjacencyList.putIfAbsent(road.getFromCity(), new ArrayList<>());
-        adjacencyList.get(road.getFromCity()).add(road);
+        Long fromCityId = road.getFromCity().getId();
+        Long toCityId = road.getToCity().getId();
 
-        adjacencyList.putIfAbsent(road.getToCity(), new ArrayList<>());
+        adjacencyList.putIfAbsent(fromCityId, new ArrayList<>());
+        adjacencyList.get(fromCityId).add(road);
+
+        adjacencyList.putIfAbsent(toCityId, new ArrayList<>());
         Road reverseRoad = new Road(null, road.getToCity(), road.getFromCity(), road.getDistance(),
                 road.getTrafficLevel(), road.getRoadType(), road.getSpeedLimit(), road.getTravelTime());
-        adjacencyList.get(road.getToCity()).add(reverseRoad);
+        adjacencyList.get(toCityId).add(reverseRoad);
     }
 
     public List<Road> getAdjacentRoads(Long cityId) {

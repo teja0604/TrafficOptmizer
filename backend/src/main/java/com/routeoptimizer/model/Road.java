@@ -7,8 +7,13 @@ public class Road {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private Long fromCity;
-    private Long toCity;
+    @ManyToOne
+    @JoinColumn(name = "from_city_id")
+    private City fromCity;
+
+    @ManyToOne
+    @JoinColumn(name = "to_city_id")
+    private City toCity;
     private double distance;
     private double trafficLevel;
 
@@ -18,7 +23,7 @@ public class Road {
 
     public Road() {}
 
-    public Road(Long id, Long fromCity, Long toCity, double distance, double trafficLevel,
+    public Road(Long id, City fromCity, City toCity, double distance, double trafficLevel,
                 String roadType, double speedLimit, double travelTime) {
         this.id = id;
         this.fromCity = fromCity;
@@ -33,10 +38,10 @@ public class Road {
     // getters/setters for all fields...
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-    public Long getFromCity() { return fromCity; }
-    public void setFromCity(Long fromCity) { this.fromCity = fromCity; }
-    public Long getToCity() { return toCity; }
-    public void setToCity(Long toCity) { this.toCity = toCity; }
+    public City getFromCity() { return fromCity; }
+    public void setFromCity(City fromCity) { this.fromCity = fromCity; }
+    public City getToCity() { return toCity; }
+    public void setToCity(City toCity) { this.toCity = toCity; }
     public double getDistance() { return distance; }
     public void setDistance(double distance) { this.distance = distance; }
     public double getTrafficLevel() { return trafficLevel; }

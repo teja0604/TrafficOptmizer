@@ -51,8 +51,8 @@ public class GraphService {
 
                 if (distance < 80.0) {
                     Road road = new Road();
-                    road.setFromCity(savedCity.getId());
-                    road.setToCity(existingCity.getId());
+                    road.setFromCity(savedCity);
+                    road.setToCity(existingCity);
                     road.setDistance(distance);
                     road.setTrafficLevel(0.1);
                     if (distance <= 20.0) {
@@ -66,8 +66,8 @@ public class GraphService {
 
                     // Also add the reverse road for consistency in DB
                     Road reverseRoad = new Road();
-                    reverseRoad.setFromCity(existingCity.getId());
-                    reverseRoad.setToCity(savedCity.getId());
+                    reverseRoad.setFromCity(existingCity);
+                    reverseRoad.setToCity(savedCity);
                     reverseRoad.setDistance(distance);
                     reverseRoad.setTrafficLevel(0.1);
                     reverseRoad.setRoadType(road.getRoadType());
@@ -88,8 +88,8 @@ public class GraphService {
             road.setTrafficLevel(0.0);
         }
 
-        City city1 = cityRepository.findById(road.getFromCity()).orElse(null);
-        City city2 = cityRepository.findById(road.getToCity()).orElse(null);
+        City city1 = road.getFromCity() != null ? cityRepository.findById(road.getFromCity().getId()).orElse(null) : null;
+        City city2 = road.getToCity() != null ? cityRepository.findById(road.getToCity().getId()).orElse(null) : null;
         if (city1 != null && city2 != null && road.getDistance() == 0) {
             road.setDistance(calculateHaversineDistance(city1.getLatitude(), city1.getLongitude(), city2.getLatitude(),
                     city2.getLongitude()));
@@ -133,9 +133,9 @@ public class GraphService {
         }
         int validRoads = 0;
         for (Road r : roadRepository.findAll()) {
-            if (r.getFromCity() != null && r.getToCity() != null &&
-                    graph.getCities().containsKey(r.getFromCity()) &&
-                    graph.getCities().containsKey(r.getToCity())) {
+            if (r.getFromCity() != null && r.getToCity() != null && r.getFromCity().getId() != null && r.getToCity().getId() != null &&
+                    graph.getCities().containsKey(r.getFromCity().getId()) &&
+                    graph.getCities().containsKey(r.getToCity().getId())) {
                 graph.addRoad(r);
                 validRoads++;
             } else {

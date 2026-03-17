@@ -55,7 +55,8 @@ public class DijkstraAlgorithm {
             }
 
             for (Road road : adjacentRoads) {
-                Long v = road.getToCity();
+                if (road.getToCity() == null) continue;
+                Long v = road.getToCity().getId();
                 if (v == null) continue;
 
                 // 3. Relax edges
@@ -86,7 +87,7 @@ public class DijkstraAlgorithm {
                     List<Road> roadsFromPrev = graph.getAdjacentRoads(prevId);
                     if (roadsFromPrev != null) {
                         Road connectingRoad = roadsFromPrev.stream()
-                                .filter(r -> r.getToCity() != null && r.getToCity().equals(currentIdFinal))
+                                .filter(r -> r.getToCity() != null && r.getToCity().getId().equals(currentIdFinal))
                                 .findFirst().orElse(null);
                         if (connectingRoad != null) {
                             finalDistance += connectingRoad.getDistance();
