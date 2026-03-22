@@ -36,8 +36,11 @@ public class RoadController {
         logger.info("[POST /api/roads] Request received: fromCityId={}, toCityId={}, distance={}, roadType={}",
                 request.getFromCityId(), request.getToCityId(), request.getDistance(), request.getRoadType());
 
-        if (request.getDistance() < 0) {
-            throw new IllegalArgumentException("Distance cannot be negative");
+        if (request.getDistance() <= 0 || request.getDistance() > 3000.0) {
+            throw new IllegalArgumentException("Invalid road distance. Must be between 1 and 3000 km.");
+        }
+        if (request.getDistance() < 50.0) {
+            logger.warn("Suspiciously short road distance: {} km. Proceeding carefully.", request.getDistance());
         }
 
         City fromCity = cityRepository.findById(request.getFromCityId())
@@ -54,7 +57,29 @@ public class RoadController {
 
         Road saved = graphService.addRoad(road);
         logger.info("[POST /api/roads] Road saved successfully with id={}", saved.getId());
+
+        // Create reverse road for undirected connection
+        Road reverseRoad = new Road();
+        reverseRoad.setFromCity(toCity);
+        reverseRoad.setToCity(fromCity);
+        reverseRoad.setDistance(request.getDistance());
+        reverseRoad.setRoadType(request.getRoadType());
+        reverseRoad.setTrafficLevel(0.1);
+        graphService.addRoad(reverseRoad);
+
         return saved;
+    }
+
+    @PostMapping("/update-distances")
+    public String updateAllDistances() {
+        logger.info("[POST /api/roads/update-distances] Triggered full DB distance update.");
+        return graphService.updateAllRoadDistances();
+    }
+
+    @PostMapping("/fix-graph")
+    public String fixGraphData() {
+        logger.info("[POST /api/roads/fix-graph] Triggered DB cleanup and missing connections fix.");
+        return graphService.fixGraphData();
     }
 }
 

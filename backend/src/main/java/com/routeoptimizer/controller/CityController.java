@@ -34,5 +34,11 @@ public class CityController {
         logger.info("[POST /api/cities] City saved successfully with id={}", saved.getId());
         return saved;
     }
+
+    @PostMapping("/auto-fix")
+    public String autoFixCityConnections() {
+        logger.info("[POST /api/cities/auto-fix] Running auto-fix for graph connectivity.");
+        return graphService.autoFixCityConnections();
+    }
 }
 

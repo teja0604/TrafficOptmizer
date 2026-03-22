@@ -18,30 +18,33 @@ const AlgorithmVisualizer = ({ shortestPathSequence, totalDistance, travelTimes 
         <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', marginBottom: '15px' }}>Itinerary</h4>
         <div style={{ 
           display: 'flex',
-          flexDirection: 'column',
+          flexWrap: 'wrap',
           alignItems: 'center',
-          gap: '8px',
+          justifyContent: 'center',
+          gap: '10px',
           color: 'var(--text-primary)', 
           fontWeight: 600,
-          maxHeight: '400px',
-          overflowY: 'auto',
           padding: '10px 0'
         }}>
           {shortestPathSequence.map((city, idx) => (
             <React.Fragment key={city.id}>
               <div style={{ 
-                padding: '10px 20px', 
+                padding: '8px 16px', 
                 background: 'rgba(0, 229, 255, 0.1)', 
-                borderRadius: '20px',
+                borderRadius: '8px',
                 border: '1px solid rgba(0, 229, 255, 0.3)',
-                width: '80%',
                 textAlign: 'center',
-                boxShadow: '0 0 10px rgba(0, 229, 255, 0.1)'
+                boxShadow: '0 0 10px rgba(0, 229, 255, 0.05)',
+                whiteSpace: 'nowrap'
               }}>
-                {city.name}
+                {idx === shortestPathSequence.length - 1 ? (
+                  <span style={{ color: 'var(--accent-cyan)' }}>{city.name}</span>
+                ) : (
+                  city.name
+                )}
               </div>
               {idx < shortestPathSequence.length - 1 && (
-                <div style={{ color: 'var(--accent-cyan)', fontSize: '1.2rem' }}>↓</div>
+                <div style={{ color: 'var(--accent-cyan)', fontSize: '1.2rem' }}>→</div>
               )}
             </React.Fragment>
           ))}

@@ -71,3 +71,4 @@ INSERT IGNORE INTO road (from_city, to_city, distance, traffic_level, road_type,
 INSERT IGNORE INTO road (from_city, to_city, distance, traffic_level, road_type, speed_limit, travel_time) VALUES (10, 7, 1000, 0.5, 'NH', 80, 12.5);
 INSERT IGNORE INTO road (from_city, to_city, distance, traffic_level, road_type, speed_limit, travel_time) VALUES (13, 4, 810, 0.5, 'NH', 80, 10.125);
 INSERT IGNORE INTO road (from_city, to_city, distance, traffic_level, road_type, speed_limit, travel_time) VALUES (12, 3, 800, 0.4, 'NH', 80, 10.0);
+INSERT IGNORE INTO road (from_city, to_city, distance, traffic_level, road_type, speed_limit, travel_time) VALUES (4, 1, 710, 0.4, 'NH', 80, 8.875);

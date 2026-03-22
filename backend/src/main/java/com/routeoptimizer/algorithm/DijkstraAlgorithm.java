@@ -77,7 +77,9 @@ public class DijkstraAlgorithm {
         double finalDistance = 0.0;
 
         if (previous.get(currId) != null || currId.equals(startCityId)) {
-            while (currId != null) {
+            Set<Long> visited = new HashSet<>();
+            while (currId != null && !visited.contains(currId)) {
+                visited.add(currId);
                 City city = graph.getCities().get(currId);
                 if (city != null) path.add(0, city);
 
@@ -88,13 +90,19 @@ public class DijkstraAlgorithm {
                     if (roadsFromPrev != null) {
                         Road connectingRoad = roadsFromPrev.stream()
                                 .filter(r -> r.getToCity() != null && r.getToCity().getId().equals(currentIdFinal))
-                                .findFirst().orElse(null);
+                                .min(Comparator.comparingDouble(r -> r.getEffectiveWeight(trafficLevel)))
+                                .orElse(null);
                         if (connectingRoad != null) {
                             finalDistance += connectingRoad.getDistance();
                         }
                     }
                 }
                 currId = prevId;
+                
+                // Safety break to prevent infinite loops in malformed graphs
+                if (path.size() > 500) {
+                    break;
+                }
             }
         }
 
