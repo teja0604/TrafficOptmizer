@@ -13,7 +13,7 @@ const AlgorithmVisualizer = ({ shortestPathSequence, totalDistance, travelTimes 
   return (
     <div className="algorithm-visualizer">
       <h3 style={{ marginBottom: '15px', color: 'var(--accent-cyan)' }}>Shortest Route Details</h3>
-      
+
       <div className="summary-card glass-card" style={{ padding: '15px', marginBottom: '20px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
         <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', marginBottom: '15px' }}>Itinerary</h4>
         <div style={{ 
@@ -26,7 +26,7 @@ const AlgorithmVisualizer = ({ shortestPathSequence, totalDistance, travelTimes 
           fontWeight: 600,
           padding: '10px 0'
         }}>
-          {shortestPathSequence.map((city, idx) => (
+          {shortestPathSequence.filter((city, i) => i === 0 || city.id !== shortestPathSequence[i-1].id).map((city, idx, arr) => (
             <React.Fragment key={city.id}>
               <div style={{ 
                 padding: '8px 16px', 
@@ -37,13 +37,13 @@ const AlgorithmVisualizer = ({ shortestPathSequence, totalDistance, travelTimes 
                 boxShadow: '0 0 10px rgba(0, 229, 255, 0.05)',
                 whiteSpace: 'nowrap'
               }}>
-                {idx === shortestPathSequence.length - 1 ? (
+                {idx === arr.length - 1 ? (
                   <span style={{ color: 'var(--accent-cyan)' }}>{city.name}</span>
                 ) : (
                   city.name
                 )}
               </div>
-              {idx < shortestPathSequence.length - 1 && (
+              {idx < arr.length - 1 && (
                 <div style={{ color: 'var(--accent-cyan)', fontSize: '1.2rem' }}>→</div>
               )}
             </React.Fragment>

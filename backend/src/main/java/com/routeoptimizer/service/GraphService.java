@@ -93,29 +93,10 @@ public class GraphService {
             road.setTrafficLevel(0.0);
         }
 
-        City city1 = road.getFromCity() != null ? cityRepository.findById(road.getFromCity().getId()).orElse(null) : null;
+        City city1 = road.getFromCity() != null ? cityRepository.findById(road.getFromCity().getId()).orElse(null)
+                : null;
         City city2 = road.getToCity() != null ? cityRepository.findById(road.getToCity().getId()).orElse(null) : null;
-        
-        if (city1 == null || city2 == null) {
-            throw new IllegalArgumentException("Both cities must exist to add a road.");
-        }
-
-        // VALIDATION: Prevent duplicate roads between same city IDs
-        List<Road> existingRoads = roadRepository.findAll();
-        boolean roadExists = existingRoads.stream().anyMatch(r -> 
-            r.getFromCity() != null && r.getToCity() != null &&
-            r.getFromCity().getId().equals(city1.getId()) && 
-            r.getToCity().getId().equals(city2.getId())
-        );
-        
-        if (roadExists) {
-            System.out.println("INFO: Road already exists between " + city1.getName() + " and " + city2.getName() + ". Skipping.");
-            return existingRoads.stream().filter(r -> 
-                r.getFromCity().getId().equals(city1.getId()) && 
-                r.getToCity().getId().equals(city2.getId())).findFirst().orElse(null);
-        }
-
-        if (road.getDistance() == 0) {
+        if (city1 != null && city2 != null && road.getDistance() == 0) {
             road.setDistance(getOSRMDrivingDistance(city1.getLatitude(), city1.getLongitude(), city2.getLatitude(),
                     city2.getLongitude()));
         }
@@ -124,9 +105,10 @@ public class GraphService {
             road.setRoadType("SH");
         }
         road.setRoadType(road.getRoadType().toUpperCase());
-        
+
         if (road.getDistance() < 1.0 || road.getDistance() > 3000.0) {
-            throw new IllegalArgumentException("Invalid road distance: " + road.getDistance() + " km. Must be realistic (1 to 3000 km).");
+            throw new IllegalArgumentException(
+                    "Invalid road distance: " + road.getDistance() + " km. Must be realistic (1 to 3000 km).");
         }
 
         double speed = ROAD_SPEEDS.getOrDefault(road.getRoadType(), 60.0);
@@ -166,8 +148,8 @@ public class GraphService {
         int count = 0;
         for (Road r : allRoads) {
             if (r.getFromCity() != null && r.getToCity() != null) {
-                double dist = getOSRMDrivingDistance(r.getFromCity().getLatitude(), r.getFromCity().getLongitude(), 
-                                                     r.getToCity().getLatitude(), r.getToCity().getLongitude());
+                double dist = getOSRMDrivingDistance(r.getFromCity().getLatitude(), r.getFromCity().getLongitude(),
+                        r.getToCity().getLatitude(), r.getToCity().getLongitude());
                 if (dist > 0 && Math.abs(dist - r.getDistance()) > 1.0) {
                     r.setDistance(dist);
                     double speed = ROAD_SPEEDS.getOrDefault(r.getRoadType(), 60.0);
@@ -182,63 +164,21 @@ public class GraphService {
 
     @Transactional
     public String fixGraphData() {
-        // 0. CLEANUP: Delete placeholder testing cities
-        List<City> citiesToClean = cityRepository.findAll().stream()
-                .filter(c -> c.getName() != null && (c.getName().equalsIgnoreCase("City A") || c.getName().equalsIgnoreCase("City B")))
-                .collect(Collectors.toList());
-        
-        if (!citiesToClean.isEmpty()) {
-            for (City c : citiesToClean) {
-                List<Road> roadsToCity = roadRepository.findAll().stream()
-                        .filter(r -> r.getFromCity().getId().equals(c.getId()) || r.getToCity().getId().equals(c.getId()))
-                        .collect(Collectors.toList());
-                roadRepository.deleteAll(roadsToCity);
-                cityRepository.delete(c);
-            }
-        }
-
         List<Road> allRoads = roadRepository.findAll();
         int fixedCount = 0;
-        int deletedCount = 0;
-        
-        // 1. DEDUPLICATION: Remove multiple roads between same cities
-        Map<String, Road> uniqueRoads = new HashMap<>();
-        List<Road> toDelete = new ArrayList<>();
-        
-        for (Road r : allRoads) {
-            if (r.getFromCity() == null || r.getToCity() == null) {
-                toDelete.add(r);
-                continue;
-            }
-            String key = r.getFromCity().getId() + "_" + r.getToCity().getId();
-            if (uniqueRoads.containsKey(key)) {
-                toDelete.add(r);
-            } else {
-                uniqueRoads.put(key, r);
-            }
-        }
-        
-        if (!toDelete.isEmpty()) {
-            roadRepository.deleteAll(toDelete);
-            deletedCount = toDelete.size();
-            // Refresh list for subsequent fixes
-            allRoads = roadRepository.findAll();
-        }
 
-        // 2. SANITIZATION: Fix unrealistic distances
         for (Road r : allRoads) {
             if (r.getFromCity() != null && r.getToCity() != null) {
                 double haversine = calculateHaversineDistance(
-                    r.getFromCity().getLatitude(), r.getFromCity().getLongitude(),
-                    r.getToCity().getLatitude(), r.getToCity().getLongitude());
-                
-                boolean isSuspicious = r.getDistance() < 1.0 || (r.getDistance() < haversine * 0.5 && r.getDistance() > 0);
-                
-                if (isSuspicious || r.getDistance() > 4000.0) {
-                    double newDist = getOSRMDrivingDistance(
                         r.getFromCity().getLatitude(), r.getFromCity().getLongitude(),
                         r.getToCity().getLatitude(), r.getToCity().getLongitude());
-                    
+
+                // If the distance is fundamentally impossible or a straight-line shortcut
+                if (r.getDistance() < 10.0 || r.getDistance() < haversine * 1.05 || r.getDistance() > 3000.0) {
+                    double newDist = getOSRMDrivingDistance(
+                            r.getFromCity().getLatitude(), r.getFromCity().getLongitude(),
+                            r.getToCity().getLatitude(), r.getToCity().getLongitude());
+
                     if (newDist > 0 && Math.abs(newDist - r.getDistance()) > 1.0) {
                         r.setDistance(newDist);
                         r.setTravelTime(newDist / ROAD_SPEEDS.getOrDefault(r.getRoadType(), 60.0));
@@ -248,60 +188,61 @@ public class GraphService {
                 }
             }
         }
-        
-        // 3. CORE CONNECTIONS: Ensure major highways exist
-        fixedCount += ensureConnection(7L, 35L); // Kolkata - Bhubaneswar
-        fixedCount += ensureConnection(35L, 12L); // Bhubaneswar - Visakhapatnam
-        fixedCount += ensureConnection(12L, 18L); // Visakhapatnam - Vijayawada
-        fixedCount += ensureConnection(18L, 32L); // Vijayawada - Nellore
-        fixedCount += ensureConnection(32L, 3L);  // Nellore - Chennai
-        fixedCount += ensureConnection(1L, 44L); // Hyderabad - Warangal
-        fixedCount += ensureConnection(44L, 12L); // Warangal - Visakhapatnam
-        fixedCount += ensureConnection(27L, 19L); // Palwal - Agra
 
-        return "Successfully audited graph. Fixed: " + fixedCount + ", Deleted Duplicates: " + deletedCount;
-    }
+        // Ensure Mumbai (4) to Hyderabad (1) exists
+        City mumbai = cityRepository.findById(4L).orElse(null);
+        City hyderabad = cityRepository.findById(1L).orElse(null);
+        if (mumbai != null && hyderabad != null) {
+            boolean hasConnection = false;
+            for (Road r : allRoads) {
+                if ((r.getFromCity().getId().equals(4L) && r.getToCity().getId().equals(1L)) ||
+                        (r.getFromCity().getId().equals(1L) && r.getToCity().getId().equals(4L))) {
+                    hasConnection = true;
+                    break;
+                }
+            }
+            if (!hasConnection) {
+                double dist = getOSRMDrivingDistance(mumbai.getLatitude(), mumbai.getLongitude(),
+                        hyderabad.getLatitude(), hyderabad.getLongitude());
 
-    private int ensureConnection(Long city1Id, Long city2Id) {
-        City c1 = cityRepository.findById(city1Id).orElse(null);
-        City c2 = cityRepository.findById(city2Id).orElse(null);
-        if (c1 == null || c2 == null) return 0;
+                Road forward = new Road();
+                forward.setFromCity(mumbai);
+                forward.setToCity(hyderabad);
+                forward.setDistance(dist);
+                forward.setRoadType("NH");
+                forward.setTrafficLevel(0.4);
+                forward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("NH", 80.0));
+                forward.setTravelTime(dist / 80.0);
+                roadRepository.save(forward);
 
-        List<Road> existing = roadRepository.findAll();
-        boolean hasConn = existing.stream().anyMatch(r -> 
-            (r.getFromCity().getId().equals(city1Id) && r.getToCity().getId().equals(city2Id)) ||
-            (r.getFromCity().getId().equals(city2Id) && r.getToCity().getId().equals(city1Id))
-        );
+                Road backward = new Road();
+                backward.setFromCity(hyderabad);
+                backward.setToCity(mumbai);
+                backward.setDistance(dist);
+                backward.setRoadType("NH");
+                backward.setTrafficLevel(0.4);
+                backward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("NH", 80.0));
+                backward.setTravelTime(dist / 80.0);
+                roadRepository.save(backward);
 
-        if (!hasConn) {
-            double dist = getOSRMDrivingDistance(c1.getLatitude(), c1.getLongitude(), c2.getLatitude(), c2.getLongitude());
-            
-            Road r1 = new Road();
-            r1.setFromCity(c1); r1.setToCity(c2); r1.setDistance(dist);
-            r1.setRoadType("NH"); r1.setTrafficLevel(0.2); 
-            r1.setSpeedLimit(80.0); r1.setTravelTime(dist/80.0);
-            roadRepository.save(r1);
-
-            Road r2 = new Road();
-            r2.setFromCity(c2); r2.setToCity(c1); r2.setDistance(dist);
-            r2.setRoadType("NH"); r2.setTrafficLevel(0.2);
-            r2.setSpeedLimit(80.0); r2.setTravelTime(dist/80.0);
-            roadRepository.save(r2);
-            return 2;
+                fixedCount += 2;
+                System.out.println("Fixed missing Mumbai-Hyderabad connection.");
+            }
         }
-        return 0;
+
+        return "Successfully fixed " + fixedCount + " unrealistic or missing roads.";
     }
 
     @Transactional
     public String autoFixCityConnections() {
         List<City> allCities = cityRepository.findAll();
         List<Road> allRoads = roadRepository.findAll();
-        
+
         Map<Long, Set<Long>> connections = new HashMap<>();
         for (City c : allCities) {
             connections.put(c.getId(), new HashSet<>());
         }
-        
+
         for (Road r : allRoads) {
             if (r.getFromCity() != null && r.getToCity() != null) {
                 if (connections.containsKey(r.getFromCity().getId())) {
@@ -312,57 +253,59 @@ public class GraphService {
                 }
             }
         }
-        
+
         int addedRoadsCount = 0;
         int citiesFixed = 0;
-        
-        // 1. Audit and Connect all cities for dense graph connectivity
+
+        // 1. Connect weak/isolated cities (connections < 2)
         for (City city : allCities) {
-            // Logic: Connect EVERY city to its nearest logical neighbors regardless of current degree
-            // This ensures a more realistic and redundant road network.
-            List<City> nearestCities = allCities.stream()
-                    .filter(c -> !c.getId().equals(city.getId()))
-                    .sorted(Comparator.comparingDouble(c -> estimateDrivingDistance(
-                            city.getLatitude(), city.getLongitude(),
-                            c.getLatitude(), c.getLongitude())))
-                    .limit(5) // Increased limit to 5 neighbors for better density
-                    .collect(Collectors.toList());
-                    
-            for (City neighbor : nearestCities) {
-                if (!connections.get(city.getId()).contains(neighbor.getId())) {
-                    double distance = estimateDrivingDistance(
-                            city.getLatitude(), city.getLongitude(),
-                            neighbor.getLatitude(), neighbor.getLongitude());
-                            
-                    Road forward = new Road();
-                    forward.setFromCity(city);
-                    forward.setToCity(neighbor);
-                    forward.setDistance(distance);
-                    forward.setTrafficLevel(0.1);
-                    forward.setRoadType("SH");
-                    forward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("SH", 60.0));
-                    forward.setTravelTime(distance / 60.0);
-                    roadRepository.save(forward);
-                    
-                    Road backward = new Road();
-                    backward.setFromCity(neighbor);
-                    backward.setToCity(city);
-                    backward.setDistance(distance);
-                    backward.setTrafficLevel(0.1);
-                    backward.setRoadType("SH");
-                    backward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("SH", 60.0));
-                    backward.setTravelTime(distance / 60.0);
-                    roadRepository.save(backward);
-                    
-                    connections.get(city.getId()).add(neighbor.getId());
-                    connections.get(neighbor.getId()).add(city.getId());
-                    
-                    addedRoadsCount += 2;
-                    System.out.println("Graph Audit - Added road: " + city.getName() + " -> " + neighbor.getName());
+            if (connections.get(city.getId()).size() < 2) {
+                citiesFixed++;
+                List<City> nearestCities = allCities.stream()
+                        .filter(c -> !c.getId().equals(city.getId()))
+                        .sorted(Comparator.comparingDouble(c -> estimateDrivingDistance(
+                                city.getLatitude(), city.getLongitude(),
+                                c.getLatitude(), c.getLongitude())))
+                        .limit(3)
+                        .collect(Collectors.toList());
+
+                for (City neighbor : nearestCities) {
+                    if (!connections.get(city.getId()).contains(neighbor.getId())) {
+                        double distance = estimateDrivingDistance(
+                                city.getLatitude(), city.getLongitude(),
+                                neighbor.getLatitude(), neighbor.getLongitude());
+
+                        Road forward = new Road();
+                        forward.setFromCity(city);
+                        forward.setToCity(neighbor);
+                        forward.setDistance(distance);
+                        forward.setTrafficLevel(0.1);
+                        forward.setRoadType("SH");
+                        forward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("SH", 60.0));
+                        forward.setTravelTime(distance / 60.0);
+                        roadRepository.save(forward);
+
+                        Road backward = new Road();
+                        backward.setFromCity(neighbor);
+                        backward.setToCity(city);
+                        backward.setDistance(distance);
+                        backward.setTrafficLevel(0.1);
+                        backward.setRoadType("SH");
+                        backward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("SH", 60.0));
+                        backward.setTravelTime(distance / 60.0);
+                        roadRepository.save(backward);
+
+                        connections.get(city.getId()).add(neighbor.getId());
+                        connections.get(neighbor.getId()).add(city.getId());
+
+                        addedRoadsCount += 2;
+                        System.out.println("Added road: " + city.getName() + " -> " + neighbor.getName());
+                        System.out.println("Added road: " + neighbor.getName() + " -> " + city.getName());
+                    }
                 }
             }
         }
-        
+
         // 2. Ensure Full Connectivity (BFS to find components)
         List<Set<Long>> components = new ArrayList<>();
         Set<Long> visited = new HashSet<>();
@@ -370,10 +313,10 @@ public class GraphService {
             if (!visited.contains(city.getId())) {
                 Set<Long> component = new HashSet<>();
                 Queue<Long> queue = new LinkedList<>();
-                
+
                 queue.add(city.getId());
                 visited.add(city.getId());
-                
+
                 while (!queue.isEmpty()) {
                     Long current = queue.poll();
                     component.add(current);
@@ -387,31 +330,31 @@ public class GraphService {
                 components.add(component);
             }
         }
-        
+
         // Connect disconnected components
         if (components.size() > 1) {
             for (int i = 0; i < components.size() - 1; i++) {
                 Set<Long> compA = components.get(i);
                 Set<Long> compB = components.get(i + 1);
-                
+
                 City cityA = allCities.stream().filter(c -> compA.contains(c.getId())).findFirst().orElse(null);
                 City cityB = allCities.stream().filter(c -> compB.contains(c.getId())).findFirst().orElse(null);
-                
+
                 if (cityA != null && cityB != null && !connections.get(cityA.getId()).contains(cityB.getId())) {
                     double distance = estimateDrivingDistance(
                             cityA.getLatitude(), cityA.getLongitude(),
                             cityB.getLatitude(), cityB.getLongitude());
-                            
+
                     Road forward = new Road();
                     forward.setFromCity(cityA);
                     forward.setToCity(cityB);
                     forward.setDistance(distance);
                     forward.setTrafficLevel(0.1);
-                    forward.setRoadType("NH"); 
+                    forward.setRoadType("NH");
                     forward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("NH", 80.0));
                     forward.setTravelTime(distance / 80.0);
                     roadRepository.save(forward);
-                    
+
                     Road backward = new Road();
                     backward.setFromCity(cityB);
                     backward.setToCity(cityA);
@@ -421,10 +364,10 @@ public class GraphService {
                     backward.setSpeedLimit(ROAD_SPEEDS.getOrDefault("NH", 80.0));
                     backward.setTravelTime(distance / 80.0);
                     roadRepository.save(backward);
-                    
+
                     connections.get(cityA.getId()).add(cityB.getId());
                     connections.get(cityB.getId()).add(cityA.getId());
-                    
+
                     addedRoadsCount += 2;
                     System.out.println("Connected component: " + cityA.getName() + " -> " + cityB.getName());
                     System.out.println("Connected component: " + cityB.getName() + " -> " + cityA.getName());
@@ -464,18 +407,41 @@ public class GraphService {
         return estimateDrivingDistance(lat1, lon1, lat2, lon2);
     }
 
+    public List<City> cleanPath(List<City> path) {
+        if (path == null || path.isEmpty()) return new ArrayList<>();
+        List<City> cleaned = new ArrayList<>();
+        for (int i = 0; i < path.size(); i++) {
+            if (i == 0 || !path.get(i).getId().equals(path.get(i - 1).getId())) {
+                cleaned.add(path.get(i));
+            }
+        }
+        return cleaned;
+    }
+
     public Graph getGraph() {
         Graph graph = new Graph();
-        for (City c : cityRepository.findAll()) {
-            graph.addCity(c);
+        List<City> allCities = cityRepository.findAll();
+        
+        // Ensure all cities are initialized as nodes
+        for (City city : allCities) {
+            graph.addCity(city);
         }
-        int validRoads = 0;
-        for (Road r : roadRepository.findAll()) {
-            if (r.getFromCity() != null && r.getToCity() != null && r.getFromCity().getId() != null && r.getToCity().getId() != null &&
-                    graph.getCities().containsKey(r.getFromCity().getId()) &&
-                    graph.getCities().containsKey(r.getToCity().getId())) {
-                graph.addRoad(r);
-                validRoads++;
+
+        List<Road> allRoads = roadRepository.findAll();
+        int validRoads = 0; // Initialize validRoads counter
+        for (Road r : allRoads) {
+            if (r.getFromCity() != null && r.getToCity() != null && 
+                r.getFromCity().getId() != null && r.getToCity().getId() != null) {
+                
+                // Prevent duplicate edges in the runtime graph
+                List<Road> existing = graph.getAdjacentRoads(r.getFromCity().getId());
+                boolean exists = existing != null && existing.stream()
+                        .anyMatch(edge -> edge.getToCity().getId().equals(r.getToCity().getId()));
+                
+                if (!exists) {
+                    graph.addRoad(r);
+                    validRoads++; // Increment validRoads only if added
+                }
             } else {
                 System.out.println("WARN: Skipping invalid/orphaned road in graph build: " + r.getId());
             }
@@ -483,27 +449,6 @@ public class GraphService {
         System.out.println(
                 "INFO: Graph built with " + graph.getCities().size() + " cities and " + validRoads + " valid roads.");
         return graph;
-    }
-
-    private List<City> cleanPath(List<City> path) {
-        if (path == null || path.isEmpty()) return new ArrayList<>();
-        
-        List<City> cleaned = new ArrayList<>();
-        String lastSeenName = null;
-        Long lastSeenId = null;
-        
-        for (City city : path) {
-            if (city == null || city.getName() == null) continue;
-            
-            // Logic: Remove consecutive cities with same ID or same Name
-            if (!city.getId().equals(lastSeenId) && !city.getName().equalsIgnoreCase(lastSeenName)) {
-                cleaned.add(city);
-                lastSeenId = city.getId();
-                lastSeenName = city.getName();
-            }
-        }
-        
-        return cleaned;
     }
 
     public ShortestPathResponse findShortestPath(Long startCityId, Long endCityId, double trafficLevel) {
@@ -518,14 +463,16 @@ public class GraphService {
             errorResp.setError("Start or end city does not exist in graph.");
             return errorResp;
         }
+        
         ShortestPathResponse resp = dijkstraAlgorithm.findShortestPath(graph, startCityId, endCityId, trafficLevel);
         
         if (resp.getPath() != null && resp.getPath().size() >= 2) {
-            List<City> cleanedDijkstra = cleanPath(resp.getPath());
-            resp.setPath(cleanedDijkstra);
+            // Apply cleaning to the raw path
+            resp.setPath(cleanPath(resp.getPath()));
             
-            List<City> enriched = detectIntermediateWaypoints(cleanedDijkstra);
-            resp.setEnrichedPath(cleanPath(enriched)); // Ensure enriched path is also clean
+            // Apply cleaning to the enriched path if geometry discovery is used
+            List<City> enriched = detectIntermediateWaypoints(resp.getPath());
+            resp.setEnrichedPath(cleanPath(enriched));
         }
         
         return resp;
@@ -534,32 +481,38 @@ public class GraphService {
     private List<City> detectIntermediateWaypoints(List<City> dijkstraPath) {
         // 1. Call OSRM to get detailed geometry
         List<double[]> geometry = fetchOSRMGeometry(dijkstraPath);
-        if (geometry.isEmpty()) return dijkstraPath;
+        if (geometry.isEmpty())
+            return dijkstraPath;
 
         // 2. Rank ALL cities (including Dijkstra nodes) along the geometry
         List<City> allCities = cityRepository.findAll();
         List<CityWithRank> ranked = new ArrayList<>();
-        
-        // We'll use a tighter threshold for cleaning unwanted/random cities
-        double thresholdKm = 7.0; // Reduced from 10km for cleaner route
+
+        // We'll use a 20km threshold for "important" intermediate cities
+        double thresholdKm = 20.0;
         Set<Long> dijkstraIds = dijkstraPath.stream().map(City::getId).collect(Collectors.toSet());
 
         for (City city : allCities) {
             int bestIdx = -1;
             double minDist = Double.MAX_VALUE;
-            
+
             // Check proximity to any sampled point on the OSRM geometry
             for (int i = 0; i < geometry.size(); i += 5) {
-                double dist = calculateHaversineDistance(geometry.get(i)[0], geometry.get(i)[1], city.getLatitude(), city.getLongitude());
+                double dist = calculateHaversineDistance(geometry.get(i)[0], geometry.get(i)[1], city.getLatitude(),
+                        city.getLongitude());
                 if (dist < minDist) {
                     minDist = dist;
                     bestIdx = i;
                 }
             }
 
-            // Representation Logic Audit: Only include if it's actually near the driving route
-            // And EXCLUDE placeholder cities
-            if (dijkstraIds.contains(city.getId()) || (minDist < thresholdKm && !city.getName().toLowerCase().contains("city "))) {
+            // Include if it's a Dijkstra city OR very close to the road
+            if (dijkstraIds.contains(city.getId()) || minDist < thresholdKm) {
+                // Ignore placeholder testing cities if not explicitly in Dijkstra path
+                if (!dijkstraIds.contains(city.getId()) && city.getName() != null
+                        && city.getName().toLowerCase().contains("city a")) {
+                    continue;
+                }
                 ranked.add(new CityWithRank(city, bestIdx));
             }
         }
@@ -567,59 +520,58 @@ public class GraphService {
         // 3. Sort by their progression along the road geometry
         ranked.sort(Comparator.comparingInt(r -> r.rank));
 
-        // 4. Extract cities and ensure no consecutive duplicates
+        // 4. Extract cities and ensure start/end are kept
+        List<City> uniqueCities = ranked.stream()
+                .map(r -> r.city)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (uniqueCities.size() <= 15)
+            return uniqueCities;
+
+        // If too many, keep start, end, and some middle ones
         List<City> result = new ArrayList<>();
-        String lastSeenName = null;
-        for (CityWithRank r : ranked) {
-            if (lastSeenName == null || !r.city.getName().equalsIgnoreCase(lastSeenName)) {
-                result.add(r.city);
-                lastSeenName = r.city.getName();
-            }
+        result.add(uniqueCities.get(0)); // Start
+
+        int step = (uniqueCities.size() - 2) / 13;
+        for (int i = 1; i < uniqueCities.size() - 1; i += Math.max(1, step)) {
+            result.add(uniqueCities.get(i));
+            if (result.size() >= 14)
+                break;
         }
 
-        // Keep path manageable
-        if (result.size() <= 12) return result;
+        if (!result.contains(uniqueCities.get(uniqueCities.size() - 1))) {
+            result.add(uniqueCities.get(uniqueCities.size() - 1)); // End
+        }
 
-        List<City> finalPath = new ArrayList<>();
-        finalPath.add(result.get(0)); // Start
-        
-        int step = (result.size() - 2) / 10;
-        for (int i = 1; i < result.size() - 1; i += Math.max(1, step)) {
-            finalPath.add(result.get(i));
-            if (finalPath.size() >= 11) break;
-        }
-        
-        if (!finalPath.contains(result.get(result.size() - 1))) {
-            finalPath.add(result.get(result.size() - 1)); // End
-        }
-        
-        return finalPath;
+        return result;
     }
 
     @SuppressWarnings("unchecked")
     private List<double[]> fetchOSRMGeometry(List<City> path) {
         try {
             String coords = path.stream()
-                .map(c -> c.getLongitude() + "," + c.getLatitude())
-                .collect(Collectors.joining(";"));
-            
-            String url = "http://router.project-osrm.org/route/v1/driving/" + coords + "?overview=full&geometries=geojson";
-            
+                    .map(c -> c.getLongitude() + "," + c.getLatitude())
+                    .collect(Collectors.joining(";"));
+
+            String url = "http://router.project-osrm.org/route/v1/driving/" + coords
+                    + "?overview=full&geometries=geojson";
+
             org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
             factory.setConnectTimeout(3000);
             factory.setReadTimeout(3000);
             RestTemplate restTemplate = new RestTemplate(factory);
-            
+
             Map<String, Object> response = restTemplate.getForObject(url, Map.class);
-            
+
             if (response != null && response.containsKey("routes")) {
                 List<Map<String, Object>> routes = (List<Map<String, Object>>) response.get("routes");
                 if (!routes.isEmpty()) {
                     Map<String, Object> geometry = (Map<String, Object>) routes.get(0).get("geometry");
                     List<List<Double>> coordsList = (List<List<Double>>) geometry.get("coordinates");
                     return coordsList.stream()
-                        .map(c -> new double[]{c.get(1), c.get(0)}) // OSRM is [lng, lat]
-                        .collect(Collectors.toList());
+                            .map(c -> new double[] { c.get(1), c.get(0) }) // OSRM is [lng, lat]
+                            .collect(Collectors.toList());
                 }
             }
         } catch (Exception e) {
@@ -631,6 +583,7 @@ public class GraphService {
     private static class CityWithRank {
         City city;
         int rank;
+
         CityWithRank(City city, int rank) {
             this.city = city;
             this.rank = rank;

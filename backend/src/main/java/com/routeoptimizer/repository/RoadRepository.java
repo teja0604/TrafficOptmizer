@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface RoadRepository extends JpaRepository<Road, Long> {
+    boolean existsByFromCityIdAndToCityId(Long fromCityId, Long toCityId);
 }

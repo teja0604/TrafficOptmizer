@@ -76,32 +76,36 @@ public class DijkstraAlgorithm {
         Long currId = endCityId;
         double finalDistance = 0.0;
 
-        if (previous.get(currId) != null || currId.equals(startCityId)) {
-            Set<Long> visited = new HashSet<>();
-            while (currId != null && !visited.contains(currId)) {
-                visited.add(currId);
+        // User-Specified Traceback Fix
+        if (previous.containsKey(currId) || currId.equals(startCityId)) {
+            while (currId != null) {
                 City city = graph.getCities().get(currId);
-                if (city != null) path.add(0, city);
-
-                Long prevId = previous.get(currId);
-                if (prevId != null) {
-                    final Long currentIdFinal = currId;
-                    List<Road> roadsFromPrev = graph.getAdjacentRoads(prevId);
-                    if (roadsFromPrev != null) {
-                        Road connectingRoad = roadsFromPrev.stream()
-                                .filter(r -> r.getToCity() != null && r.getToCity().getId().equals(currentIdFinal))
-                                .min(Comparator.comparingDouble(r -> r.getEffectiveWeight(trafficLevel)))
-                                .orElse(null);
-                        if (connectingRoad != null) {
-                            finalDistance += connectingRoad.getDistance();
-                        }
-                    }
+                if (city != null) {
+                    path.add(0, city);
                 }
-                currId = prevId;
-                
-                // Safety break to prevent infinite loops in malformed graphs
-                if (path.size() > 500) {
-                    break;
+                currId = previous.get(currId);
+            }
+        }
+
+        // Safety: Ensure path starts with the source
+        if (path.isEmpty() || !path.get(0).getId().equals(startCityId)) {
+            ShortestPathResponse errorResp = new ShortestPathResponse();
+            errorResp.setError("No route found between selected cities");
+            return errorResp;
+        }
+
+        // Calculate actual road distance for the validated path
+        for (int i = 0; i < path.size() - 1; i++) {
+            Long u = path.get(i).getId();
+            Long v = path.get(i + 1).getId();
+            List<Road> roadsFromU = graph.getAdjacentRoads(u);
+            if (roadsFromU != null) {
+                Road connectingRoad = roadsFromU.stream()
+                        .filter(r -> r.getToCity() != null && r.getToCity().getId().equals(v))
+                        .min(Comparator.comparingDouble(r -> r.getEffectiveWeight(trafficLevel)))
+                        .orElse(null);
+                if (connectingRoad != null) {
+                    finalDistance += connectingRoad.getDistance();
                 }
             }
         }

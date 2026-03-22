@@ -11,10 +11,10 @@ const ResultPanel = ({ shortestPath, totalDistance, travelTimes }) => {
       <h3 style={{ color: '#00e5ff', marginBottom: '15px', fontSize: '1.2rem', fontWeight: 'bold' }}>Final Path:</h3>
       
       <div style={{ color: '#ffffff', fontSize: '1.1rem', marginBottom: '25px', lineHeight: '1.5' }}>
-        {shortestPath.map((c, index) => (
+        {shortestPath.filter((city, i) => i === 0 || city.id !== shortestPath[i-1].id).map((c, index, arr) => (
           <span key={c.id}>
             {c.name}
-            {index < shortestPath.length - 1 && <span style={{ margin: '0 8px' }}>→</span>}
+            {index < arr.length - 1 && <span style={{ margin: '0 8px' }}>→</span>}
           </span>
         ))}
       </div>

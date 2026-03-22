@@ -23,6 +23,12 @@ public class PathController {
         if (request.getStartCity() == null || request.getEndCity() == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Start city and end city cannot be null"));
         }
+        
+        // Validation: Source and destination cannot be the same
+        if (request.getStartCity().equals(request.getEndCity())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Source and destination cities must be different"));
+        }
+
         ShortestPathResponse resp = graphService.findShortestPath(
                 request.getStartCity(),
                 request.getEndCity(),

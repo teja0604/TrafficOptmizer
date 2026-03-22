@@ -14,7 +14,13 @@ const CitySelector = ({ cities, onSelectStart, onSelectEnd, startCity, endCity }
       </div>
       <div className="form-group" style={{ marginTop: '15px' }}>
         <label>Destination City</label>
-        <select className="input-field" value={endCity || ""} onChange={(e) => onSelectEnd(e.target.value)}>
+        <select className="input-field" value={endCity || ""} onChange={(e) => {
+          if (e.target.value === startCity) {
+            alert("Destination cannot be the same as Start City");
+            return;
+          }
+          onSelectEnd(e.target.value);
+        }}>
           <option value="">Select Destination</option>
           {cities.map(city => (
             <option key={city.id} value={city.id}>{city.name}</option>

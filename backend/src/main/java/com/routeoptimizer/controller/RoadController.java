@@ -5,6 +5,7 @@ import com.routeoptimizer.model.Road;
 import com.routeoptimizer.dto.RoadRequest;
 import com.routeoptimizer.service.GraphService;
 import com.routeoptimizer.repository.CityRepository;
+import com.routeoptimizer.repository.RoadRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +20,12 @@ public class RoadController {
 
     private final GraphService graphService;
     private final CityRepository cityRepository;
+    private final RoadRepository roadRepository;
 
-    public RoadController(GraphService graphService, CityRepository cityRepository) {
+    public RoadController(GraphService graphService, CityRepository cityRepository, RoadRepository roadRepository) {
         this.graphService = graphService;
         this.cityRepository = cityRepository;
+        this.roadRepository = roadRepository;
     }
 
     @GetMapping
@@ -47,6 +50,11 @@ public class RoadController {
                 .orElseThrow(() -> new IllegalArgumentException("Invalid fromCityId: " + request.getFromCityId()));
         City toCity = cityRepository.findById(request.getToCityId())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid toCityId: " + request.getToCityId()));
+
+        // Validation: Prevent duplicate roads
+        if (roadRepository.existsByFromCityIdAndToCityId(fromCity.getId(), toCity.getId())) {
+            throw new RuntimeException("Road already exists between " + fromCity.getName() + " and " + toCity.getName());
+        }
 
         Road road = new Road();
         road.setFromCity(fromCity);
