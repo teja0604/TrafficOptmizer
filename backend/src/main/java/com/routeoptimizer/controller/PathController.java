@@ -1,12 +1,13 @@
 package com.routeoptimizer.controller;
 
 import com.routeoptimizer.algorithm.ShortestPathResponse;
+import com.routeoptimizer.model.City;
 import com.routeoptimizer.model.Graph;
 import com.routeoptimizer.service.GraphService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -20,22 +21,37 @@ public class PathController {
 
     @PostMapping("/shortest-path")
     public ResponseEntity<?> findShortestPath(@RequestBody PathRequest request) {
+        // Always return a consistent response body (never throw client-side 400s for routing errors).
         if (request.getStartCity() == null || request.getEndCity() == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Start city and end city cannot be null"));
+            ShortestPathResponse resp = new ShortestPathResponse();
+            resp.setPath(List.of());
+            resp.setEnrichedPath(List.of());
+            resp.setError("Start city and end city cannot be null");
+            return ResponseEntity.ok(resp);
         }
-        
-        // Validation: Source and destination cannot be the same
+
+        // If source == destination, return a trivial path with that single city.
         if (request.getStartCity().equals(request.getEndCity())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Source and destination cities must be different"));
+            Graph graph = graphService.getGraph();
+            City city = graph.getCities().get(request.getStartCity());
+            ShortestPathResponse resp = new ShortestPathResponse();
+            if (city != null) {
+                resp.setPath(List.of(city));
+                resp.setEnrichedPath(List.of(city));
+            } else {
+                resp.setPath(List.of());
+                resp.setEnrichedPath(List.of());
+                resp.setError("Start city does not exist in graph.");
+            }
+            resp.setDistance(0.0);
+            resp.setTotalTravelMinutes(0.0);
+            return ResponseEntity.ok(resp);
         }
 
         ShortestPathResponse resp = graphService.findShortestPath(
                 request.getStartCity(),
                 request.getEndCity(),
                 request.getTrafficLevel() > 0 ? request.getTrafficLevel() : 1.0);
-        if (resp.getError() != null) {
-            return ResponseEntity.badRequest().body(Map.of("error", resp.getError()));
-        }
         return ResponseEntity.ok(resp);
     }
 

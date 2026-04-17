@@ -167,9 +167,17 @@ const HomePage = () => {
 
     try {
       const res = await api.shortestPath(startCity, endCity, trafficLevel);
-      const finalPathData = res.data.path || [];
+      const routeCities = (res.data?.enrichedPath && res.data.enrichedPath.length > 0)
+        ? res.data.enrichedPath
+        : (res.data?.path || []);
+
+      if (res.data?.error && routeCities.length < 2) {
+        alert(res.data.error);
+        setIsLoading(false);
+        return;
+      }
       
-      if (finalPathData.length === 0) {
+      if (routeCities.length === 0) {
         alert("No route found between these cities. Please try adding more roads!");
         setIsLoading(false);
         return;
@@ -190,11 +198,16 @@ const HomePage = () => {
         bike: formatTime(baseMinutes * 0.8)
       };
 
-      const roadGeometry = await api.getRoadPath(finalPathData);
-      const enrichedSequence = res.data.enrichedPath || finalPathData;
+      const roadGeometry = await api.getRoadPath(routeCities);
 
-      setShortestPathSequence(enrichedSequence);
-      setShortestPath(roadGeometry.length > 0 ? roadGeometry : finalPathData.map(c => [c.lat, c.lng]));
+      // Always use the backend path cities as the canonical route markers/sequence.
+      setShortestPathSequence(routeCities);
+      setShortestPath(roadGeometry.length > 0
+        ? roadGeometry
+        : routeCities.map(c => [
+            (c.latitude ?? c.lat),
+            (c.longitude ?? c.lng)
+          ]));
       setTotalDistance(finalDistanceData);
       setTravelTimes(finalTravelTimes);
 

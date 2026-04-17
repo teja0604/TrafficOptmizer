@@ -48,7 +48,7 @@ public class PathControllerIntegrationTest {
     }
 
     @Test
-    void testShortestPathErrorWhenNoRoads() throws Exception {
+    void testShortestPathWorksWithoutDbRoads() throws Exception {
         City c1 = cityRepository.save(new City(null, "A", 0, 0));
         City c2 = cityRepository.save(new City(null, "B", 1, 1));
 
@@ -59,8 +59,10 @@ public class PathControllerIntegrationTest {
         mockMvc.perform(post("/api/shortest-path")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").exists());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.path[0].name").value("A"))
+                .andExpect(jsonPath("$.path[1].name").value("B"))
+                .andExpect(jsonPath("$.distance").isNumber());
     }
 
     @Test
@@ -88,5 +90,43 @@ public class PathControllerIntegrationTest {
                 .andExpect(jsonPath("$.path[0].name").value("A"))
                 .andExpect(jsonPath("$.path[1].name").value("B"))
                 .andExpect(jsonPath("$.distance").isNumber());
+    }
+
+    @Test
+    void testShortestPathWorksAcrossMultipleVirtualHops() throws Exception {
+        City c1 = cityRepository.save(new City(null, "A0", 0, 0));
+        City c2 = cityRepository.save(new City(null, "A1", 2, 0));
+        City c3 = cityRepository.save(new City(null, "A2", 4, 0));
+        City c4 = cityRepository.save(new City(null, "A3", 6, 0));
+        City c5 = cityRepository.save(new City(null, "A4", 8, 0));
+
+        PathRequest req = new PathRequest();
+        req.setStartCity(c1.getId());
+        req.setEndCity(c5.getId());
+
+        mockMvc.perform(post("/api/shortest-path")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.path[0].name").value("A0"))
+                .andExpect(jsonPath("$.path").isArray())
+                .andExpect(jsonPath("$.path[1]").exists())
+                .andExpect(jsonPath("$.path[?(@.name=='A4')]").isNotEmpty())
+                .andExpect(jsonPath("$.distance").isNumber());
+    }
+
+    @Test
+    void testShortestPathReturnsErrorBodyForUnknownCities() throws Exception {
+        PathRequest req = new PathRequest();
+        req.setStartCity(9999L);
+        req.setEndCity(10000L);
+
+        mockMvc.perform(post("/api/shortest-path")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.error").value("Start or end city does not exist in graph."))
+                .andExpect(jsonPath("$.path").isArray())
+                .andExpect(jsonPath("$.path").isEmpty());
     }
 }

@@ -7,6 +7,7 @@ import com.routeoptimizer.model.Graph;
 import com.routeoptimizer.model.Road;
 import com.routeoptimizer.repository.CityRepository;
 import com.routeoptimizer.repository.RoadRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -33,9 +34,14 @@ public class GraphService {
             "VILLAGE", 25.0,
             "BAD_SH", 30.0);
 
+    private static final String VIRTUAL_ROAD_TYPE = "VIRTUAL";
+
     private final DijkstraAlgorithm dijkstraAlgorithm;
     private final CityRepository cityRepository;
     private final RoadRepository roadRepository;
+
+    @Value("${app.osrm.enabled:true}")
+    private boolean osrmEnabled;
 
     public GraphService(DijkstraAlgorithm dijkstraAlgorithm, CityRepository cityRepository,
             RoadRepository roadRepository) {
@@ -379,6 +385,9 @@ public class GraphService {
     }
 
     public double getOSRMDrivingDistance(double lat1, double lon1, double lat2, double lon2) {
+        if (!osrmEnabled) {
+            return estimateDrivingDistance(lat1, lon1, lat2, lon2);
+        }
         try {
             String coords = lon1 + "," + lat1 + ";" + lon2 + "," + lat2;
             String url = "http://router.project-osrm.org/route/v1/driving/" + coords + "?overview=false";
@@ -418,6 +427,235 @@ public class GraphService {
         return cleaned;
     }
 
+    private static final double VIRTUAL_EDGE_MAX_DISTANCE_KM = 250.0;
+    private static final int VIRTUAL_EDGE_MAX_NEIGHBORS_PER_CITY = 4;
+    private static final int VIRTUAL_EDGE_MIN_DEGREE_PER_CITY = 2;
+    private static final double VIRTUAL_EDGE_TIME_PENALTY = 1.1; // slight penalty vs real DB roads (distance is already inflated)
+
+    private boolean hasEdge(Graph graph, Long fromCityId, Long toCityId) {
+        List<Road> existing = graph.getAdjacentRoads(fromCityId);
+        return existing != null && existing.stream()
+                .anyMatch(edge -> edge.getToCity() != null && toCityId.equals(edge.getToCity().getId()));
+    }
+
+    private boolean isVirtualRoad(Road road) {
+        return road != null && road.getRoadType() != null && VIRTUAL_ROAD_TYPE.equalsIgnoreCase(road.getRoadType());
+    }
+
+    private boolean addVirtualEdgeIfMissing(Graph graph, City from, City to, double distanceKm) {
+        if (from == null || to == null || from.getId() == null || to.getId() == null) return false;
+        if (from.getId().equals(to.getId())) return false;
+        if (hasEdge(graph, from.getId(), to.getId())) return false;
+
+        Road road = new Road();
+        road.setFromCity(from);
+        road.setToCity(to);
+        road.setDistance(distanceKm);
+        road.setTrafficLevel(0.0);
+        road.setRoadType(VIRTUAL_ROAD_TYPE);
+
+        double speed = 60.0;
+        road.setSpeedLimit(speed);
+        road.setTravelTime((distanceKm / speed) * VIRTUAL_EDGE_TIME_PENALTY);
+
+        graph.addRoad(road);
+        return true;
+    }
+
+    /**
+     * Auto-generate runtime-only "virtual" connections between cities that are geographically close.
+     * This makes routing work even when the DB has incomplete road coverage.
+     *
+     * Note: Graph.addRoad already adds the reverse adjacency edge, so we add each pair once.
+     */
+    private int connectNearbyCities(Graph graph) {
+        List<City> cities = new ArrayList<>(graph.getCities().values());
+        int added = 0;
+
+        for (City c1 : cities) {
+            if (c1 == null || c1.getId() == null) continue;
+            Long c1Id = c1.getId();
+
+            List<Road> adjacent = graph.getAdjacentRoads(c1Id);
+            long virtualDegree = adjacent == null ? 0 : adjacent.stream().filter(this::isVirtualRoad).count();
+            long realDegree = adjacent == null ? 0 : adjacent.stream().filter(r -> !isVirtualRoad(r)).count();
+            if (realDegree >= VIRTUAL_EDGE_MIN_DEGREE_PER_CITY) continue;
+            int remaining = VIRTUAL_EDGE_MAX_NEIGHBORS_PER_CITY - (int) virtualDegree;
+            if (remaining <= 0) continue;
+
+            List<CityDistance> candidates = new ArrayList<>();
+            for (City c2 : cities) {
+                if (c2 == null || c2.getId() == null) continue;
+                if (c1Id.equals(c2.getId())) continue;
+                if (hasEdge(graph, c1Id, c2.getId())) continue;
+
+                double haversineKm = calculateHaversineDistance(
+                        c1.getLatitude(), c1.getLongitude(),
+                        c2.getLatitude(), c2.getLongitude());
+                if (haversineKm > VIRTUAL_EDGE_MAX_DISTANCE_KM) continue;
+
+                double distanceKm = estimateDrivingDistance(
+                        c1.getLatitude(), c1.getLongitude(),
+                        c2.getLatitude(), c2.getLongitude());
+                candidates.add(new CityDistance(c2, distanceKm));
+            }
+
+            candidates.sort(Comparator.comparingDouble(cd -> cd.distanceKm));
+
+            for (CityDistance candidate : candidates) {
+                if (remaining <= 0) break;
+                if (addVirtualEdgeIfMissing(graph, c1, candidate.city, candidate.distanceKm)) {
+                    added++;
+                    remaining--;
+                }
+            }
+        }
+
+        return added;
+    }
+
+    private int ensureVirtualConnectivity(Graph graph) {
+        int added = 0;
+        added += connectNearbyCities(graph);
+        added += addNearestVirtualEdges(graph);
+        added += connectDisconnectedComponents(graph);
+        return added;
+    }
+
+    private int addNearestVirtualEdges(Graph graph) {
+        List<City> cities = new ArrayList<>(graph.getCities().values());
+        int added = 0;
+
+        for (City city : cities) {
+            if (city == null || city.getId() == null) continue;
+
+            int currentDegree = graph.getAdjacentRoads(city.getId()).size();
+            if (currentDegree >= VIRTUAL_EDGE_MIN_DEGREE_PER_CITY) continue;
+            int maxEdgesToAdd = Math.max(0, Math.min(VIRTUAL_EDGE_MAX_NEIGHBORS_PER_CITY, VIRTUAL_EDGE_MIN_DEGREE_PER_CITY - currentDegree));
+            if (maxEdgesToAdd == 0) continue;
+
+            List<CityDistance> candidates = new ArrayList<>();
+            for (City other : cities) {
+                if (other == null || other.getId() == null) continue;
+                if (other.getId().equals(city.getId())) continue;
+                double dist = estimateDrivingDistance(city.getLatitude(), city.getLongitude(),
+                        other.getLatitude(), other.getLongitude());
+                candidates.add(new CityDistance(other, dist));
+            }
+            candidates.sort(Comparator.comparingDouble(cd -> cd.distanceKm));
+
+            int addedForCity = 0;
+
+            // Pass 1: add nearby edges within the preferred threshold.
+            for (CityDistance candidate : candidates) {
+                if (addedForCity >= maxEdgesToAdd) break;
+                if (candidate.distanceKm > VIRTUAL_EDGE_MAX_DISTANCE_KM) break;
+                if (addVirtualEdgeIfMissing(graph, city, candidate.city, candidate.distanceKm)) {
+                    added++;
+                    addedForCity++;
+                }
+            }
+
+            // Pass 2: if still isolated, allow the closest remaining edges (even if far).
+            for (CityDistance candidate : candidates) {
+                if (addedForCity >= maxEdgesToAdd) break;
+                if (graph.getAdjacentRoads(city.getId()).size() >= VIRTUAL_EDGE_MIN_DEGREE_PER_CITY) break;
+                if (addVirtualEdgeIfMissing(graph, city, candidate.city, candidate.distanceKm)) {
+                    added++;
+                    addedForCity++;
+                }
+            }
+        }
+
+        return added;
+    }
+
+    private int connectDisconnectedComponents(Graph graph) {
+        List<Set<Long>> components = computeConnectedComponents(graph);
+        if (components.size() <= 1) return 0;
+
+        List<City> cities = new ArrayList<>(graph.getCities().values());
+        Map<Long, City> byId = cities.stream()
+                .filter(c -> c != null && c.getId() != null)
+                .collect(Collectors.toMap(City::getId, c -> c));
+
+        int added = 0;
+        Set<Long> main = new HashSet<>(components.get(0));
+
+        for (int i = 1; i < components.size(); i++) {
+            Set<Long> component = components.get(i);
+            double best = Double.POSITIVE_INFINITY;
+            City bestA = null;
+            City bestB = null;
+
+            for (Long aId : main) {
+                City a = byId.get(aId);
+                if (a == null) continue;
+                for (Long bId : component) {
+                    City b = byId.get(bId);
+                    if (b == null) continue;
+                    double dist = estimateDrivingDistance(a.getLatitude(), a.getLongitude(), b.getLatitude(),
+                            b.getLongitude());
+                    if (dist < best) {
+                        best = dist;
+                        bestA = a;
+                        bestB = b;
+                    }
+                }
+            }
+
+            if (bestA != null && bestB != null) {
+                if (addVirtualEdgeIfMissing(graph, bestA, bestB, best)) {
+                    added++;
+                }
+                // Graph.addRoad makes the reverse edge too.
+                main.addAll(component);
+            }
+        }
+
+        return added;
+    }
+
+    private List<Set<Long>> computeConnectedComponents(Graph graph) {
+        Set<Long> unvisited = new HashSet<>(graph.getCities().keySet());
+        List<Set<Long>> components = new ArrayList<>();
+
+        while (!unvisited.isEmpty()) {
+            Long start = unvisited.iterator().next();
+            Queue<Long> q = new LinkedList<>();
+            Set<Long> component = new HashSet<>();
+            q.add(start);
+            unvisited.remove(start);
+
+            while (!q.isEmpty()) {
+                Long current = q.poll();
+                component.add(current);
+
+                for (Road road : graph.getAdjacentRoads(current)) {
+                    if (road.getToCity() == null || road.getToCity().getId() == null) continue;
+                    Long next = road.getToCity().getId();
+                    if (unvisited.remove(next)) {
+                        q.add(next);
+                    }
+                }
+            }
+
+            components.add(component);
+        }
+
+        return components;
+    }
+
+    private static class CityDistance {
+        final City city;
+        final double distanceKm;
+
+        private CityDistance(City city, double distanceKm) {
+            this.city = city;
+            this.distanceKm = distanceKm;
+        }
+    }
+
     public Graph getGraph() {
         Graph graph = new Graph();
         List<City> allCities = cityRepository.findAll();
@@ -446,33 +684,45 @@ public class GraphService {
                 System.out.println("WARN: Skipping invalid/orphaned road in graph build: " + r.getId());
             }
         }
+        int virtualRoads = ensureVirtualConnectivity(graph);
         System.out.println(
-                "INFO: Graph built with " + graph.getCities().size() + " cities and " + validRoads + " valid roads.");
+                "INFO: Graph built with " + graph.getCities().size() + " cities, " + validRoads + " DB roads, and "
+                        + virtualRoads + " virtual roads.");
         return graph;
     }
 
     public ShortestPathResponse findShortestPath(Long startCityId, Long endCityId, double trafficLevel) {
-        if (roadRepository.count() == 0) {
-            ShortestPathResponse errorResp = new ShortestPathResponse();
-            errorResp.setError("No road connections exist between cities");
-            return errorResp;
-        }
         Graph graph = getGraph();
         if (!graph.getCities().containsKey(startCityId) || !graph.getCities().containsKey(endCityId)) {
             ShortestPathResponse errorResp = new ShortestPathResponse();
             errorResp.setError("Start or end city does not exist in graph.");
+            errorResp.setPath(new ArrayList<>());
+            errorResp.setEnrichedPath(new ArrayList<>());
             return errorResp;
         }
         
         ShortestPathResponse resp = dijkstraAlgorithm.findShortestPath(graph, startCityId, endCityId, trafficLevel);
+
+        // Contract: always return a non-null list for path/enrichedPath.
+        if (resp.getPath() == null) {
+            resp.setPath(new ArrayList<>());
+        }
         
-        if (resp.getPath() != null && resp.getPath().size() >= 2) {
+        if (resp.getPath() != null) {
             // Apply cleaning to the raw path
             resp.setPath(cleanPath(resp.getPath()));
-            
-            // Apply cleaning to the enriched path if geometry discovery is used
-            List<City> enriched = detectIntermediateWaypoints(resp.getPath());
-            resp.setEnrichedPath(cleanPath(enriched));
+
+            // Always provide a non-null enrichedPath for client simplicity.
+            if (resp.getPath().size() >= 2) {
+                List<City> enriched = detectIntermediateWaypoints(resp.getPath());
+                resp.setEnrichedPath(cleanPath(enriched));
+            } else {
+                resp.setEnrichedPath(resp.getPath());
+            }
+        }
+
+        if (resp.getEnrichedPath() == null) {
+            resp.setEnrichedPath(resp.getPath() != null ? resp.getPath() : new ArrayList<>());
         }
         
         return resp;
@@ -549,6 +799,9 @@ public class GraphService {
 
     @SuppressWarnings("unchecked")
     private List<double[]> fetchOSRMGeometry(List<City> path) {
+        if (!osrmEnabled) {
+            return java.util.Collections.emptyList();
+        }
         try {
             String coords = path.stream()
                     .map(c -> c.getLongitude() + "," + c.getLatitude())

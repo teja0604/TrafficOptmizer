@@ -19,7 +19,7 @@ const createCustomIcon = (color) => {
   });
 };
 
-const MapUpdater = ({ shortestPath, alternativePath }) => {
+const MapUpdater = ({ shortestPath, alternativePath, routeMarkers }) => {
   const map = useMap();
   useEffect(() => {
     const points = [];
@@ -29,12 +29,21 @@ const MapUpdater = ({ shortestPath, alternativePath }) => {
     if (alternativePath && alternativePath.length > 0) {
       alternativePath.forEach(p => points.push([p[0], p[1]]));
     }
+    if (points.length === 0 && routeMarkers && routeMarkers.length > 1) {
+      routeMarkers.forEach(c => {
+        const lat = c.latitude ?? c.lat;
+        const lng = c.longitude ?? c.lng;
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          points.push([lat, lng]);
+        }
+      });
+    }
 
     if (points.length > 1) {
       const bounds = L.latLngBounds(points);
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 8 });
     }
-  }, [shortestPath, alternativePath, map]);
+  }, [shortestPath, alternativePath, routeMarkers, map]);
 
   return null;
 };
@@ -93,6 +102,11 @@ const MapView = ({ cities, shortestPath, alternativePath, shortestPathSequence, 
   }, [alternativePath]);
 
   const indiaBounds = [[6.4627, 68.1097], [35.5133, 97.3956]];
+  const selectedStart = (cities || []).find(c => String(c.id) === String(startCity));
+  const selectedEnd = (cities || []).find(c => String(c.id) === String(endCity));
+  const routeMarkers = (shortestPathSequence && shortestPathSequence.length > 0)
+    ? shortestPathSequence
+    : [selectedStart, selectedEnd].filter(Boolean);
 
   return (
     <div id="map" style={{ height: '100%', width: '100%', position: 'relative' }}>
@@ -118,7 +132,7 @@ const MapView = ({ cities, shortestPath, alternativePath, shortestPathSequence, 
           attribution="&copy; OpenStreetMap contributors &copy; CARTO"
         />
         
-        <MapUpdater shortestPath={shortestPath} alternativePath={alternativePath} />
+        <MapUpdater shortestPath={shortestPath} alternativePath={alternativePath} routeMarkers={routeMarkers} />
         <ClickHandler onMapClick={onMapClick} />
 
         {/* Alternative Path (Orange) */}
@@ -147,26 +161,26 @@ const MapView = ({ cities, shortestPath, alternativePath, shortestPathSequence, 
           </Polyline>
         )}
 
-        {cities.map(city => {
-          const isStart = String(city.id) === String(startCity);
-          const isEnd = String(city.id) === String(endCity);
-          const isInPath = shortestPathSequence && shortestPathSequence.some(c => String(c.id) === String(city.id));
+        {(routeMarkers || []).map((city, index, arr) => {
+          if (!city) return null;
+          const lat = city.latitude ?? city.lat;
+          const lng = city.longitude ?? city.lng;
+          if (typeof lat !== 'number' || typeof lng !== 'number') return null;
 
-          if (!isStart && !isEnd && !isInPath) return null;
+          const isStart = index === 0;
+          const isEnd = index === arr.length - 1;
 
-          let color = '#3b82f6'; // Shortest route (blue)
-          if (isEnd) color = '#ef4444'; // End (red)
-          
+          let color = '#3b82f6'; // intermediate (blue)
+          if (isStart) color = '#22c55e'; // start (green)
+          if (isEnd) color = '#ef4444'; // end (red)
+
           return (
-            <Marker key={city.id} position={[city.lat, city.lng]} icon={createCustomIcon(color)}>
-              <Tooltip direction="top" offset={[0, -10]} opacity={1} permanent={isStart || isEnd}>
-                <strong>{isStart ? 'START: ' : isEnd ? 'DEST: ' : ''}{city.name}</strong>
-              </Tooltip>
+            <Marker key={city.id ?? `${index}-${city.name}`} position={[lat, lng]} icon={createCustomIcon(color)}>
               <Popup>
                 <div style={{ color: '#0f172a' }}>
-                  <strong>{city.name}</strong>
+                  <strong>{index + 1}. {city.name}</strong>
                   <br />
-                  Lat: {city.lat.toFixed(4)}, Lng: {city.lng.toFixed(4)}
+                  Lat: {lat.toFixed(4)}, Lng: {lng.toFixed(4)}
                 </div>
               </Popup>
             </Marker>
