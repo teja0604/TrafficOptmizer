@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import './HomePage.css';
 import MapView from '../components/MapView';
@@ -64,26 +65,22 @@ const initialRoads = [
   { from: '11', to: '5', distance: 500 },
 ];
 
-const GRAPH_CACHE_KEY = 'traffic-optimizer.graph-cache.v1';
-const CITIES_CACHE_KEY = 'cities';
-const ROADS_CACHE_KEY = 'roads';
-const GRAPH_CACHE_TIME_KEY = 'traffic-optimizer.graph-cache.time';
-const GRAPH_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const GRAPH_CACHE_KEY = 'graphData';
+const GRAPH_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 
 const readGraphCache = ({ allowExpired = false } = {}) => {
   if (typeof window === 'undefined') return null;
 
   try {
     const raw = window.localStorage.getItem(GRAPH_CACHE_KEY);
-    const savedAt = Number(window.localStorage.getItem(GRAPH_CACHE_TIME_KEY) || 0);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.cities) || !Array.isArray(parsed?.roads)) {
+    if (!Array.isArray(parsed?.cities) || !Array.isArray(parsed?.roads) || typeof parsed?.timestamp !== 'number') {
       return null;
     }
 
-    const age = savedAt > 0 ? Date.now() - savedAt : Number.POSITIVE_INFINITY;
+    const age = Date.now() - parsed.timestamp;
     const isExpired = age > GRAPH_CACHE_MAX_AGE_MS;
 
     if (isExpired && !allowExpired) {
@@ -107,11 +104,8 @@ const writeGraphCache = (nextCities, nextRoads) => {
     window.localStorage.setItem(GRAPH_CACHE_KEY, JSON.stringify({
       cities: nextCities,
       roads: nextRoads,
-      savedAt: new Date().toISOString(),
+      timestamp: Date.now(),
     }));
-    window.localStorage.setItem(GRAPH_CACHE_TIME_KEY, String(Date.now()));
-    window.localStorage.setItem(CITIES_CACHE_KEY, JSON.stringify(nextCities));
-    window.localStorage.setItem(ROADS_CACHE_KEY, JSON.stringify(nextRoads));
   } catch (error) {
     console.warn('Failed to cache graph data:', error);
   }
@@ -165,25 +159,28 @@ const HomePage = () => {
       setGraphLoadMessage(message);
     };
 
-    const loadGraphData = async () => {
+    const fetchGraph = async () => {
       const now = Date.now();
       if (now - lastGraphFetchRef.current < 3000) {
         return;
       }
+      const cachedGraphSnapshot = readGraphCache({ allowExpired: true });
+
+      if (cachedGraphSnapshot && !cachedGraphSnapshot.isExpired) {
+        console.log('Cache is fresh, skipping fetch');
+        if (!cancelled) {
+          setIsGraphLoading(false);
+          setGraphError(null);
+          setGraphLoadMessage('');
+        }
+        return;
+      }
+
       lastGraphFetchRef.current = now;
 
       if (!cancelled) {
         setIsGraphLoading(true);
         setGraphError(null);
-      }
-
-      const cachedGraph = readGraphCache();
-      if (cachedGraph && cachedGraph.cities.length > 0 && cachedGraph.roads.length > 0 && cities.length === 0 && roads.length === 0) {
-        applyGraphData(
-          cachedGraph.cities,
-          cachedGraph.roads,
-          'Showing your last synced graph while live data refreshes.'
-        );
       }
 
       try {
@@ -194,17 +191,17 @@ const HomePage = () => {
 
         const finalCities = citiesRes.data.length > 0
           ? citiesRes.data
-          : (cachedGraph?.cities?.length > 0 ? cachedGraph.cities : initialCities);
+          : (cachedGraphSnapshot?.cities?.length > 0 ? cachedGraphSnapshot.cities : initialCities);
         const finalRoads = roadsRes.data.length > 0
           ? roadsRes.data
-          : (cachedGraph?.roads?.length > 0 ? cachedGraph.roads : initialRoads);
+          : (cachedGraphSnapshot?.roads?.length > 0 ? cachedGraphSnapshot.roads : initialRoads);
 
         applyGraphData(finalCities, finalRoads);
         writeGraphCache(finalCities, finalRoads);
       } catch (err) {
         console.error("Failed to load graph data:", err);
 
-        const fallbackGraph = readGraphCache({ allowExpired: true });
+        const fallbackGraph = cachedGraphSnapshot;
         if (fallbackGraph?.cities?.length > 0 && fallbackGraph?.roads?.length > 0) {
           applyGraphData(
             fallbackGraph.cities,
@@ -236,10 +233,21 @@ const HomePage = () => {
 
     const handleReconnect = () => {
       if (document.visibilityState === 'hidden') return;
-      loadGraphData();
+      fetchGraph();
     };
 
-    loadGraphData();
+    const cachedGraph = readGraphCache();
+    if (cachedGraph && cachedGraph.cities.length > 0 && cachedGraph.roads.length > 0) {
+      console.log('Using cached graph data');
+      applyGraphData(
+        cachedGraph.cities,
+        cachedGraph.roads,
+        cachedGraph.isExpired ? 'Showing cached data (backend syncing...)' : ''
+      );
+      setIsGraphLoading(false);
+    }
+
+    fetchGraph();
     window.addEventListener('focus', handleReconnect);
     window.addEventListener('online', handleReconnect);
     document.addEventListener('visibilitychange', handleReconnect);

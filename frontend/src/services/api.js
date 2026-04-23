@@ -15,13 +15,16 @@ if (!API_BASE_URL) {
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000,
 });
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     console.error('API ERROR:', error?.response || error.message);
+    if (error.code === 'ECONNABORTED') {
+      console.warn('Backend still waking up (Render cold start)');
+    }
 
     const config = error.config;
 
@@ -30,9 +33,10 @@ api.interceptors.response.use(
     }
 
     config.__retry = true;
+    console.log('Retrying request...');
 
     return new Promise((resolve) => {
-      setTimeout(() => resolve(api(config)), 1000);
+      setTimeout(() => resolve(api(config)), 8000);
     });
   }
 );
