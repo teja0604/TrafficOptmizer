@@ -2,6 +2,8 @@ package com.routeoptimizer.controller;
 
 import com.routeoptimizer.model.City;
 import com.routeoptimizer.service.GraphService;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +23,11 @@ public class CityController {
     }
 
     @GetMapping
-    public Collection<City> getAllCities() {
+    public ResponseEntity<Collection<City>> getAllCities() {
         logger.info("[GET /api/cities] Fetching all cities.");
-        return graphService.getAllCities();
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(graphService.getAllCities());
     }
 
     @PostMapping
@@ -41,4 +45,3 @@ public class CityController {
         return graphService.autoFixCityConnections();
     }
 }
-

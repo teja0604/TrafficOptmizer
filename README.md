@@ -17,7 +17,7 @@ A full-stack application for optimizing traffic routes using Dijkstra's algorith
 ### Backend
 1. Create a MySQL database named `route_optimizer`.
 2. Configure environment variables (optional, defaults provided):
-   - `DB_URL`, `DB_USER`, `DB_PASSWORD`, `ALLOWED_ORIGINS`
+   - `DB_URL`, `DB_USER`, `DB_PASSWORD`, `ALLOWED_ORIGINS`, `ALLOWED_ORIGIN_PATTERNS`
 3. Run with Maven:
    ```bash
    cd backend
@@ -40,4 +40,7 @@ A full-stack application for optimizing traffic routes using Dijkstra's algorith
 ## Deployment
 1. **Frontend**: Run `npm run build` and deploy the `dist` folder to any static hosting.
 2. **Backend**: Run `./mvnw package` and deploy the generated JAR to a Java-compatible server.
-
+3. **Vercel + separate backend**:
+   - Set `VITE_API_URL` in Vercel to your deployed backend URL.
+   - Set backend `ALLOWED_ORIGIN_PATTERNS=https://*.vercel.app` for Vercel preview/prod URLs.
+   - If you use a custom frontend domain, add it to `ALLOWED_ORIGINS`.

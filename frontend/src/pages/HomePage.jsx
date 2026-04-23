@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './HomePage.css';
 import MapView from '../components/MapView';
 import CitySelector from '../components/CitySelector';
 import AlgorithmVisualizer from '../components/AlgorithmVisualizer';
-import ResultPanel from '../components/ResultPanel';
 import TrafficSlider from '../components/TrafficSlider';
 import AddCityModal from '../components/AddCityModal';
 import AddRoadModal from '../components/AddRoadModal';
-import { api } from '../services/api';
+import api from '../services/api';
 
 
 // Initial Mock Data
@@ -65,6 +64,59 @@ const initialRoads = [
   { from: '11', to: '5', distance: 500 },
 ];
 
+const GRAPH_CACHE_KEY = 'traffic-optimizer.graph-cache.v1';
+const CITIES_CACHE_KEY = 'cities';
+const ROADS_CACHE_KEY = 'roads';
+const GRAPH_CACHE_TIME_KEY = 'traffic-optimizer.graph-cache.time';
+const GRAPH_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+
+const readGraphCache = ({ allowExpired = false } = {}) => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(GRAPH_CACHE_KEY);
+    const savedAt = Number(window.localStorage.getItem(GRAPH_CACHE_TIME_KEY) || 0);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.cities) || !Array.isArray(parsed?.roads)) {
+      return null;
+    }
+
+    const age = savedAt > 0 ? Date.now() - savedAt : Number.POSITIVE_INFINITY;
+    const isExpired = age > GRAPH_CACHE_MAX_AGE_MS;
+
+    if (isExpired && !allowExpired) {
+      return null;
+    }
+
+    return {
+      ...parsed,
+      isExpired,
+    };
+  } catch (error) {
+    console.warn('Failed to read cached graph data:', error);
+    return null;
+  }
+};
+
+const writeGraphCache = (nextCities, nextRoads) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(GRAPH_CACHE_KEY, JSON.stringify({
+      cities: nextCities,
+      roads: nextRoads,
+      savedAt: new Date().toISOString(),
+    }));
+    window.localStorage.setItem(GRAPH_CACHE_TIME_KEY, String(Date.now()));
+    window.localStorage.setItem(CITIES_CACHE_KEY, JSON.stringify(nextCities));
+    window.localStorage.setItem(ROADS_CACHE_KEY, JSON.stringify(nextRoads));
+  } catch (error) {
+    console.warn('Failed to cache graph data:', error);
+  }
+};
+
 const HomePage = () => {
   const [cities, setCities] = useState([]);
   const [roads, setRoads] = useState([]);
@@ -82,6 +134,10 @@ const HomePage = () => {
   const [simulationStarted, setSimulationStarted] = useState(false);
   const [animationSpeed, setAnimationSpeed] = useState(3);
   const [theme, setTheme] = useState('dark');
+  const [graphLoadMessage, setGraphLoadMessage] = useState('');
+  const [graphError, setGraphError] = useState(null);
+  const [isGraphLoading, setIsGraphLoading] = useState(true);
+  const lastGraphFetchRef = useRef(0);
 
   const [isCityModalOpen, setCityModalOpen] = useState(false);
   const [isRoadModalOpen, setRoadModalOpen] = useState(false);
@@ -100,21 +156,100 @@ const HomePage = () => {
   const memoizedRoads = React.useMemo(() => roads, [roads]);
 
   useEffect(() => {
-    const fetchData = async () => {
+    let cancelled = false;
+
+    const applyGraphData = (nextCities, nextRoads, message = '') => {
+      if (cancelled) return;
+      setCities(nextCities);
+      setRoads(nextRoads);
+      setGraphLoadMessage(message);
+    };
+
+    const loadGraphData = async () => {
+      const now = Date.now();
+      if (now - lastGraphFetchRef.current < 3000) {
+        return;
+      }
+      lastGraphFetchRef.current = now;
+
+      if (!cancelled) {
+        setIsGraphLoading(true);
+        setGraphError(null);
+      }
+
+      const cachedGraph = readGraphCache();
+      if (cachedGraph && cachedGraph.cities.length > 0 && cachedGraph.roads.length > 0 && cities.length === 0 && roads.length === 0) {
+        applyGraphData(
+          cachedGraph.cities,
+          cachedGraph.roads,
+          'Showing your last synced graph while live data refreshes.'
+        );
+      }
+
       try {
-        const citiesRes = await api.getCities();
-        const finalCities = citiesRes.data.length > 0 ? citiesRes.data : initialCities;
-        setCities(finalCities);
-        
-        const roadsRes = await api.getRoads();
-        setRoads(roadsRes.data.length > 0 ? roadsRes.data : initialRoads);
+        const [citiesRes, roadsRes] = await Promise.all([
+          api.getCities(),
+          api.getRoads(),
+        ]);
+
+        const finalCities = citiesRes.data.length > 0
+          ? citiesRes.data
+          : (cachedGraph?.cities?.length > 0 ? cachedGraph.cities : initialCities);
+        const finalRoads = roadsRes.data.length > 0
+          ? roadsRes.data
+          : (cachedGraph?.roads?.length > 0 ? cachedGraph.roads : initialRoads);
+
+        applyGraphData(finalCities, finalRoads);
+        writeGraphCache(finalCities, finalRoads);
       } catch (err) {
         console.error("Failed to load graph data:", err);
-        setCities(initialCities);
-        setRoads(initialRoads);
+
+        const fallbackGraph = readGraphCache({ allowExpired: true });
+        if (fallbackGraph?.cities?.length > 0 && fallbackGraph?.roads?.length > 0) {
+          applyGraphData(
+            fallbackGraph.cities,
+            fallbackGraph.roads,
+            fallbackGraph.isExpired
+              ? 'Backend is temporarily unavailable. Showing your last synced graph data from a previous session.'
+              : 'Backend is temporarily unavailable. Showing your last synced graph data.'
+          );
+          if (!cancelled) {
+            setGraphError(null);
+          }
+          return;
+        }
+
+        applyGraphData(
+          initialCities,
+          initialRoads,
+          'Backend is temporarily unavailable. Showing sample data until the API responds again.'
+        );
+        if (!cancelled) {
+          setGraphError('Failed to load live city data.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsGraphLoading(false);
+        }
       }
     };
-    fetchData();
+
+    const handleReconnect = () => {
+      if (document.visibilityState === 'hidden') return;
+      loadGraphData();
+    };
+
+    loadGraphData();
+    window.addEventListener('focus', handleReconnect);
+    window.addEventListener('online', handleReconnect);
+    document.addEventListener('visibilitychange', handleReconnect);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', handleReconnect);
+      window.removeEventListener('online', handleReconnect);
+      document.removeEventListener('visibilitychange', handleReconnect);
+    };
   }, []);
 
   const handleMapClick = (lat, lng) => {
@@ -126,10 +261,15 @@ const HomePage = () => {
     try {
       setIsLoading(true);
       const res = await api.addCity(cityData);
-      setCities([...cities, res.data]);
+      const nextCities = [...cities, res.data];
+      setCities(nextCities);
       
       const roadsRes = await api.getRoads();
-      setRoads(roadsRes.data);
+      const nextRoads = roadsRes.data;
+      setRoads(nextRoads);
+      writeGraphCache(nextCities, nextRoads);
+      setGraphLoadMessage('');
+      setGraphError(null);
       setIsLoading(false);
     } catch (err) {
       console.error("Failed to add city:", err);
@@ -142,7 +282,11 @@ const HomePage = () => {
     try {
       setIsLoading(true);
       const res = await api.addRoad(roadData);
-      setRoads([...roads, res.data]);
+      const nextRoads = [...roads, res.data];
+      setRoads(nextRoads);
+      writeGraphCache(cities, nextRoads);
+      setGraphLoadMessage('');
+      setGraphError(null);
       setIsLoading(false);
     } catch (err) {
       console.error("Failed to add road:", err);
@@ -273,6 +417,34 @@ const HomePage = () => {
         </div>
       </header>
 
+      {graphLoadMessage && (
+        <div
+          className="glass-card"
+          style={{
+            margin: '0 20px 16px',
+            padding: '12px 16px',
+            border: '1px solid rgba(251, 191, 36, 0.45)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {graphLoadMessage}
+        </div>
+      )}
+
+      {graphError && !graphLoadMessage && (
+        <div
+          className="glass-card"
+          style={{
+            margin: '0 20px 16px',
+            padding: '12px 16px',
+            border: '1px solid rgba(239, 68, 68, 0.45)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {graphError}
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className="main-content">
         {/* Left Control Panel */}
@@ -286,6 +458,15 @@ const HomePage = () => {
               startCity={startCity}
               endCity={endCity}
             />
+
+            {isGraphLoading && memoizedCities.length === 0 && (
+              <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
+                <div style={{ height: '14px', width: '42%', borderRadius: '999px', background: 'rgba(148, 163, 184, 0.22)' }} />
+                <div style={{ height: '42px', width: '100%', borderRadius: '12px', background: 'rgba(148, 163, 184, 0.16)' }} />
+                <div style={{ height: '14px', width: '58%', borderRadius: '999px', background: 'rgba(148, 163, 184, 0.22)' }} />
+                <div style={{ height: '42px', width: '100%', borderRadius: '12px', background: 'rgba(148, 163, 184, 0.16)' }} />
+              </div>
+            )}
 
             <TrafficSlider
               trafficLevel={trafficLevel}

@@ -6,6 +6,8 @@ import com.routeoptimizer.dto.RoadRequest;
 import com.routeoptimizer.service.GraphService;
 import com.routeoptimizer.repository.CityRepository;
 import com.routeoptimizer.repository.RoadRepository;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
@@ -29,9 +31,11 @@ public class RoadController {
     }
 
     @GetMapping
-    public List<Road> getAllRoads() {
+    public ResponseEntity<List<Road>> getAllRoads() {
         logger.info("[GET /api/roads] Fetching all roads.");
-        return graphService.getAllRoads();
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(graphService.getAllRoads());
     }
 
     @PostMapping
@@ -90,4 +94,3 @@ public class RoadController {
         return graphService.fixGraphData();
     }
 }
-
